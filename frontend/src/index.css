@@ -1,0 +1,471 @@
+@import "tailwindcss";
+
+:root {
+  /* Claude Desktop-aligned color palette */
+  --bg-primary: #faf9f5;
+  --bg-secondary: #e8e6dc;
+  --bg-tertiary: #f5f4ed;
+  --bg-inverse: #141413;
+  --white: #ffffff;
+  --text-primary: #141413;
+  --text-secondary: #3d3d3a;
+  --text-muted: #73726c;
+  --border: rgba(31, 30, 29, 0.15);
+  --border-strong: rgba(31, 30, 29, 0.3);
+  --bg-hover: rgba(218, 119, 86, 0.1);
+
+  /* Anthropic accent */
+  --anthropic-coral: #da7756;
+  --anthropic-coral-light: rgba(218, 119, 86, 0.15);
+
+  /* Verdict colors */
+  --pursue-bg: #e8f5e9;
+  --pursue-text: #2e7d32;
+  --maybe-bg: #fff8e1;
+  --maybe-text: #f57f17;
+  --skip-bg: #ffebee;
+  --skip-text: #c62828;
+
+  /* Spacing */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Transitions */
+button, input, a, tr {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* CV Markdown Styling */
+.cv {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+  line-height: 1.3;
+  color: var(--text-primary);
+  max-width: 800px;
+}
+
+.cv h1 {
+  font-size: 28px;
+  font-weight: 600;
+  margin: 0 0 0.25rem 0;
+  color: var(--text-primary);
+}
+
+.cv h1 + p {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--bg-secondary);
+}
+
+.cv h2 {
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #788c5d;
+  margin: 1.5rem 0 0.75rem 0;
+  padding-bottom: 0.25rem;
+  border-bottom: 2px solid #788c5d;
+}
+
+.cv h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 1rem 0 0.125rem 0;
+  color: var(--text-primary);
+}
+
+.cv h4 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 1rem 0 0.25rem 0;
+  color: var(--text-muted);
+}
+
+.cv em {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.cv p {
+  margin: 0.5rem 0;
+}
+
+.cv ul {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+}
+
+.cv li {
+  margin: 0.25rem 0;
+}
+
+.cv strong {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.cv a {
+  color: #6a9bcc;
+  text-decoration: none;
+}
+
+.cv a:hover {
+  text-decoration: underline;
+}
+
+/* Deep Dive Markdown Styling */
+.deep-dive-md {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.deep-dive-md h1,
+.deep-dive-md h2,
+.deep-dive-md h3 {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 1rem 0 0.5rem 0;
+}
+
+.deep-dive-md h1 { font-size: 18px; }
+.deep-dive-md h2 { font-size: 16px; }
+.deep-dive-md h3 { font-size: 14px; }
+
+.deep-dive-md p {
+  margin: 0.5rem 0;
+}
+
+.deep-dive-md ul,
+.deep-dive-md ol {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+}
+
+.deep-dive-md li {
+  margin: 0.25rem 0;
+}
+
+.deep-dive-md strong {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.deep-dive-md em {
+  font-style: italic;
+}
+
+.deep-dive-md a {
+  color: #6a9bcc;
+  text-decoration: none;
+}
+
+.deep-dive-md a:hover {
+  text-decoration: underline;
+}
+
+.deep-dive-md code {
+  font-family: monospace;
+  font-size: 13px;
+  background: var(--bg-tertiary);
+  padding: 0.125rem 0.25rem;
+  border-radius: 3px;
+}
+
+.deep-dive-md blockquote {
+  border-left: 3px solid var(--border-strong);
+  margin: 0.5rem 0;
+  padding-left: 1rem;
+  color: var(--text-muted);
+}
+
+/* Job Description Markdown Styling */
+.jd {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.jd h1,
+.jd h2,
+.jd h3,
+.jd h4 {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 1rem 0 0.5rem 0;
+}
+
+.jd h1 { font-size: 18px; }
+.jd h2 { font-size: 16px; }
+.jd h3 { font-size: 15px; }
+.jd h4 { font-size: 14px; }
+
+.jd p {
+  margin: 0.5rem 0;
+}
+
+.jd ul,
+.jd ol {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+}
+
+.jd li {
+  margin: 0.25rem 0;
+}
+
+.jd strong {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.jd em {
+  font-style: italic;
+}
+
+.jd a {
+  color: #6a9bcc;
+  text-decoration: none;
+}
+
+.jd a:hover {
+  text-decoration: underline;
+}
+
+/* Job row exit animation */
+@keyframes job-exit {
+  0% {
+    background-color: transparent;
+    opacity: 1;
+    transform: scaleY(1);
+    max-height: 60px;
+  }
+  20% {
+    background-color: var(--anthropic-coral-light);
+    opacity: 1;
+    transform: scaleY(1);
+    max-height: 60px;
+  }
+  40% {
+    background-color: var(--anthropic-coral-light);
+    opacity: 1;
+    transform: scaleY(1);
+    max-height: 60px;
+  }
+  100% {
+    background-color: var(--anthropic-coral-light);
+    opacity: 0;
+    transform: scaleY(0);
+    max-height: 0;
+  }
+}
+
+.job-row-exiting {
+  animation: job-exit 600ms ease-out forwards;
+  transform-origin: top center;
+  overflow: hidden;
+}
+
+.job-row-exiting td {
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  transition: padding 300ms ease-out 300ms;
+}
+
+/* Job row entrance animation */
+@keyframes job-enter {
+  0% {
+    opacity: 0;
+    transform: scaleY(0);
+    max-height: 0;
+  }
+  50% {
+    opacity: 0.5;
+    transform: scaleY(1);
+    max-height: 60px;
+  }
+  100% {
+    opacity: 1;
+    transform: scaleY(1);
+    max-height: 60px;
+    background-color: transparent;
+  }
+}
+
+.job-row-entering {
+  animation: job-enter 400ms ease-out forwards;
+  transform-origin: top center;
+  background-color: var(--pursue-bg);
+}
+
+/* View carousel transitions */
+.view-carousel {
+  display: flex;
+  transition: transform 280ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.view-carousel.skip-transition {
+  transition: transform 380ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.view-panel {
+  flex-shrink: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* Archived item styling */
+.archived-row {
+  opacity: 0.5;
+}
+
+.archived-row:hover {
+  opacity: 0.7;
+}
+
+.archived-badge {
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.restore-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.restore-btn:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--border-strong);
+}
+
+.archive-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  opacity: 0.4;
+}
+
+.list-row:hover .archive-btn,
+.archive-btn:focus {
+  opacity: 1;
+  background: var(--bg-secondary);
+  border-color: var(--border);
+}
+
+.archive-btn:hover {
+  background: var(--skip-bg);
+  color: var(--skip-text);
+  border-color: var(--skip-text);
+}
+
+/* Selected row styling */
+tr.selected {
+  background-color: var(--bg-secondary);
+}
+
+/* Drag handle styling */
+.drag-handle {
+  cursor: grab;
+  user-select: none;
+  opacity: 0.4;
+  transition: opacity 0.15s ease;
+}
+
+.drag-handle:hover {
+  opacity: 1;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Dragging row - lifted appearance */
+tr.dragging {
+  opacity: 0.7;
+  transform: scale(1.01);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  background: var(--white) !important;
+  position: relative;
+  z-index: 10;
+}
+
+/* Drop target - subtle beige highlight with directional indicator */
+tr.drag-over {
+  background: var(--bg-secondary) !important;
+}
+
+tr.drag-over.drag-down {
+  box-shadow: inset 0 -2px 0 var(--border-strong);
+}
+
+tr.drag-over.drag-up {
+  box-shadow: inset 0 2px 0 var(--border-strong);
+}
+
+/* Smooth reordering animation for all rows */
+tbody tr {
+  transition: transform 0.2s ease, background-color 0.15s ease, opacity 0.15s ease;
+}
+
+/* Disable transition during active drag to prevent jank */
+tbody tr.dragging {
+  transition: opacity 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* Settle animation after drop */
+@keyframes job-settle {
+  0% {
+    background-color: var(--bg-secondary);
+    transform: scale(1.005);
+  }
+  100% {
+    background-color: transparent;
+    transform: scale(1);
+  }
+}
+
+tr.job-row-settled {
+  animation: job-settle 400ms ease-out forwards;
+}
+
+tr.job-row-settled.selected {
+  animation: none;
+  background-color: var(--bg-secondary);
+}

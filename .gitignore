@@ -1,0 +1,75 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Linting
+.ruff_cache/
+.mypy_cache/
+
+# macOS
+.DS_Store
+
+# Environment variables
+.env
+.env.*
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Project: Data folder contents (private, runtime, credentials)
+data/**/*
+!data/**/.gitkeep
+
+# Project: Internal development docs
+docs/
+!docs/screenshot.png
+CLAUDE.md
+
+# Project: Frontend build output
+backend/server/static/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+backend/applications/
+
+# Build artifacts
+*.skill
+*.zip

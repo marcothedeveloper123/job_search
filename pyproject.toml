@@ -1,0 +1,42 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "job-search"
+version = "1.0.0"
+description = "Job search management UI with Claude Desktop integration"
+authors = ["job-search contributors"]
+readme = "README.md"
+packages = [
+    { include = "job_search", from = "backend" },
+    { include = "server", from = "backend" },
+    { include = "scripts", from = "backend" },
+]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+requests = "^2.31.0"
+beautifulsoup4 = "^4.12.2"
+pydantic = "^2.3.0"
+fastapi = "^0.115.0"
+uvicorn = { extras = ["standard"], version = "^0.34.0" }
+websockets = "^14.0"
+playwright = "^1.57.0"
+python-docx = "^1.2.0"
+markdownify = "^1.2.2"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+pytest-asyncio = "^0.26.0"
+pytest-mock = "^3.14.0"
+black = "*"
+pre-commit = "*"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.black]
+line-length = 88
