@@ -266,21 +266,64 @@ export function JobList({ jobs, selectedIds, onSelectionChange, onRestore, onReo
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm" onDragLeave={handleTableDragLeave}>
+    <div className="flex flex-col h-full">
+      {/* Fixed header */}
+      <table className="w-full text-sm table-fixed">
+        <colgroup>
+          <col className="w-6" />
+          <col className="w-10" />
+          <col />
+          <col className="w-36" />
+          <col className="w-32" />
+          <col className="w-12" />
+          <col className="w-16" />
+          <col className="w-20" />
+        </colgroup>
         <thead>
           <tr style={{ borderBottom: '1px solid var(--border)' }}>
-            <th className="w-6"></th>
-            <th className="p-3 w-10"></th>
+            <th></th>
+            <th className="p-3">
+              <input
+                type="checkbox"
+                checked={jobs.length > 0 && jobs.every((j) => selectedIds.includes(j.job_id))}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    const allIds = jobs.map((j) => j.job_id)
+                    const merged = [...new Set([...selectedIds, ...allIds])]
+                    onSelectionChange(merged)
+                  } else {
+                    const visibleIds = new Set(jobs.map((j) => j.job_id))
+                    onSelectionChange(selectedIds.filter((id) => !visibleIds.has(id)))
+                  }
+                }}
+                className="w-4 h-4 cursor-pointer"
+                style={{ accentColor: 'var(--bg-inverse)' }}
+                title="Select/deselect all"
+              />
+            </th>
             <SortHeader label="Title" sortKey="title" current={sortKey} asc={sortAsc} onClick={handleSort} />
             <SortHeader label="Company" sortKey="company" current={sortKey} asc={sortAsc} onClick={handleSort} />
             <SortHeader label="Location" sortKey="location" current={sortKey} asc={sortAsc} onClick={handleSort} />
             <SortHeader label="Src" sortKey="source" current={sortKey} asc={sortAsc} onClick={handleSort} />
             <SortHeader label="Age" sortKey="days_ago" current={sortKey} asc={sortAsc} onClick={handleSort} />
-            <th className="p-3 w-20"></th>
+            <th className="p-3"></th>
           </tr>
         </thead>
-        <FlipMove typeName="tbody" duration={300} easing="ease-out" enterAnimation="fade" leaveAnimation={false}>
+      </table>
+      {/* Scrollable body */}
+      <div className="flex-1 overflow-y-auto">
+        <table className="w-full text-sm table-fixed" onDragLeave={handleTableDragLeave}>
+          <colgroup>
+            <col className="w-6" />
+            <col className="w-10" />
+            <col />
+            <col className="w-36" />
+            <col className="w-32" />
+            <col className="w-12" />
+            <col className="w-16" />
+            <col className="w-20" />
+          </colgroup>
+          <FlipMove typeName="tbody" duration={300} easing="ease-out" enterAnimation="fade" leaveAnimation={false}>
           {sortedJobs.map((job) => {
             const isSelected = selectedIds.includes(job.job_id)
             const isExiting = exitingIds.has(job.job_id)
@@ -372,8 +415,9 @@ export function JobList({ jobs, selectedIds, onSelectionChange, onRestore, onReo
               </tr>
             )
           })}
-        </FlipMove>
-      </table>
+          </FlipMove>
+        </table>
+      </div>
     </div>
   )
 }

@@ -353,7 +353,7 @@ function App() {
               selectedCount={selectedIds.length}
               totalCount={filteredJobs.length}
             />
-            <main className="flex-1 overflow-y-auto">
+            <main className="flex-1 overflow-hidden">
               <JobList
                 jobs={filteredJobs}
                 selectedIds={selectedIds}
