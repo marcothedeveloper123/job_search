@@ -1,6 +1,6 @@
 ---
 name: job-search
-description: Job search assistant with web UI at localhost:8000. Triggers on "search jobs", "find PM roles", "top picks", "scrape JD", "deep dive", "reorder jobs", "prepare application". All data flows to UI — never output job lists in chat.
+description: Job search assistant with web UI at localhost:8000. Triggers on "search jobs", "find PM roles", "top picks", "scrape JD", "deep dive", "reorder jobs", "prepare application", "add job board", "fix scraper", "configure scraper". All data flows to UI — never output job lists in chat. For scraper config, use `jbs scraper` CLI commands (never edit files directly).
 ---
 
 # Execution
@@ -14,6 +14,8 @@ mcp__desktop-commander__start_process
 ```
 
 **This is the ONLY way to interact with the job search system.**
+
+**IMPORTANT:** `jbs` is on PATH. Run it directly — never `cd` to a directory first.
 
 File reads: `mcp__desktop-commander__read_file` with absolute path to the project directory.
 
@@ -85,7 +87,7 @@ Run `jbs filter` to see current settings. Update with:
 | 0. Overview | `jbs pipeline` | Full state: jobs, dives, apps |
 | 1. Check | `jbs status` | `OK \| auth: yes \| user: <name>` |
 | 2. Selections | `jbs sel` | Jobs user selected in UI — work on THESE |
-| 3. Search | `jbs jobs "query" location` | `Added N` |
+| 3. Search | `jbs jobs "query" [loc] [--sources=X]` | `Added N` |
 | 4. Filter | `jbs list`, then `jbs archive` non-fits | Archive count |
 | 5. Scrape | `jbs scrape job_id [...]` | `Scraped N JDs` |
 | 6. Qualify | `jbs get job_id`, archive non-fits | JD text |
@@ -94,15 +96,21 @@ Run `jbs filter` to see current settings. Update with:
 
 **Step 4 is mandatory.** Review `jbs list` against `jbs filter`. Archive jobs that fail hard filters (wrong location, wrong level, excluded companies) BEFORE scraping.
 
+**Source selection (Step 3):** LinkedIn is always searched. Run `jbs sources` to see additional boards and their `when_to_use` descriptions. Add relevant sources based on user's query/location (e.g., Netherlands → `--sources=indeed_nl`, Prague → `--sources=jobscz,startupjobs`).
+
 **If `auth: no`**: `jbs login`. **If connection refused**: `poetry run python -m server.app`
 
 # Profile Files
 
-| File | Read before |
-|------|-------------|
-| `data/profile/anti-positioning.md` | Qualifying (red flags, signals) |
-| `data/profile/base.md` | CV, cover letter |
-| `data/profile/star-bank.md` | Interview prep |
+`jbs profile` shows path and files. Read with `jbs profile show <name>`. Write directly to the path.
+
+| Profile | Purpose |
+|---------|---------|
+| `anti-positioning` | Red flags, signals for qualifying |
+| `base` | CV content, contact info |
+| `star-bank` | STAR stories for interview prep |
+| `search-preferences` | Search strategy notes |
+| `writing-style` | Tone/style for applications |
 
 # Standards
 
@@ -112,6 +120,7 @@ These reference files are bundled inside this skill. Read them from the skill's 
 |-----------|-----------|
 | `references/deep-dive.md` (in this skill) | Before Step 6-7 (qualifying + research). Has qualification gate, research questions, **all `jbs dive` fields with examples**, verdict guidelines. |
 | `references/application.md` (in this skill) | Before Step 8 (apply). Has gap analysis, CV tailoring, cover letter, salary research, interview prep, referral search, follow-up plan. |
+| `references/scraper-maintenance.md` (in this skill) | When adding a new job board or fixing broken scrapers. Has CLI commands for config, selectors, testing. |
 
 # Rules
 
@@ -141,14 +150,17 @@ These reference files are bundled inside this skill. Read them from the skill's 
 | `jbs filter set <k> <v>` | Set filter (comma-sep for arrays) |
 | `jbs filter clear <k>` | Remove filter |
 | `jbs filter reset` | Clear all filters |
-| `jbs jobs <query> [location]` | Search, filter, auto-ingest |
+| `jbs profile` | List profile files |
+| `jbs profile show <name>` | Show profile contents |
+| `jbs sources` | List boards with when_to_use descriptions |
+| `jbs jobs <query> [loc] [--sources=X,Y]` | Search (linkedin auto-included) |
 | `jbs picks [--level=X] [--ai]` | LinkedIn recommendations |
 | `jbs scrape <id> [id...]` | Scrape JDs |
 | `jbs get <id>` | Single job with JD text |
 | `jbs list [--archived] [--limit=N] [--page=N]` | List jobs (default limit 20 for archived) |
 | `jbs sel` | Show user-selected jobs (what to work on next) |
-| `jbs select <id> [id...]` | Mark jobs for review |
-| `jbs deselect <id> [id...]` | Unmark jobs |
+| `jbs select <id> [id...] \| --all` | Mark jobs for review |
+| `jbs deselect <id> [id...] \| --all` | Unmark jobs |
 | `jbs verdict <id> <Pursue\|Maybe\|Skip>` | Set verdict |
 | `jbs dead <id> [id...]` | Mark jobs as expired/closed |
 | `jbs archive-listings <id> [id...]` | Archive job listings |
@@ -163,6 +175,12 @@ These reference files are bundled inside this skill. Read them from the skill's 
 | `jbs archive-app <id> [id...]` | Archive applications (by app_id) |
 | `jbs unarchive-app <id> [id...]` | Unarchive applications (by app_id) |
 | `jbs clear-all` | Archive all jobs, dives, and apps |
+| `jbs scraper list` | List configured scrapers |
+| `jbs scraper show <name>` | Show scraper config |
+| `jbs scraper create <name>` | Create new scraper (includes search + JD config) |
+| `jbs scraper set <n> <k> <v>` | Set config value (dot notation) |
+| `jbs scraper test <n> <query>` | Test search scraper |
+| `jbs scraper test-jd <n> <job_id>` | Test JD scraper |
 
 **Aliases:** `jbs dive list` → `jbs dives`, `jbs app list` → `jbs apps`, `jbs selections` → `jbs sel`
 
@@ -192,4 +210,4 @@ Stage meanings: `inbox` (no JD), `scraped` (JD, no dive), `researched` (dive), `
 
 **Pagination:** `--page=1/5` as last line when paginated.
 
-**ID prefixes:** `li_` (LinkedIn), `cz_` (jobs.cz), `sj_` (startupjobs), `er_` (euremotejobs).
+**ID prefixes:** `li_` (LinkedIn), `cz_` (jobs.cz), `sj_` (startupjobs), `er_` (euremotejobs), `in_` (indeed_nl).

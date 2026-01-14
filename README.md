@@ -53,6 +53,44 @@ After running setup, install the skill in Claude Desktop:
 
 Claude will guide you through creating your profile on first use.
 
+## Adding Job Boards
+
+Scraper configuration is fully CLI-driven. Claude can add new job boards or fix broken ones without editing files.
+
+```bash
+jbs scraper list              # List existing scrapers
+jbs scraper show <name>       # View config
+jbs scraper create <name>     # Create new scraper
+jbs scraper set <n> <k> <v>   # Set config value
+jbs scraper test <n> <query>  # Test scraper
+```
+
+### Adding a New Board
+
+Ask Claude: "Add support for nl.indeed.com"
+
+Claude will:
+1. Inspect the site's DOM structure (via Browser MCP)
+2. Create and configure the scraper:
+   ```bash
+   jbs scraper create indeed_nl
+   jbs scraper set indeed_nl base_url "https://nl.indeed.com/jobs"
+   jbs scraper set indeed_nl selectors.card ".job_seen_beacon"
+   jbs scraper set indeed_nl selectors.title "h2.jobTitle a"
+   ```
+3. Test it: `jbs scraper test indeed_nl "product manager"`
+
+### Fixing Broken Scrapers
+
+When a job board redesigns and scraping fails:
+
+1. Ask Claude: "LinkedIn search is returning empty results. Can you fix it?"
+2. Claude inspects the updated DOM and fixes selectors:
+   ```bash
+   jbs scraper set linkedin selectors.card ".NEW_SELECTOR"
+   jbs scraper test linkedin "product manager"
+   ```
+
 ## License
 
 MIT
