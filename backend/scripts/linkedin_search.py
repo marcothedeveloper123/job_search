@@ -1,4 +1,8 @@
-"""LinkedIn Search API with region presets and filtering."""
+"""LinkedIn Search API with region presets and filtering.
+
+Config-driven with fallback to hardcoded defaults.
+Edit data/scrapers/linkedin.json to update selectors without code changes.
+"""
 
 import hashlib
 import json
@@ -11,10 +15,22 @@ from playwright.sync_api import sync_playwright
 
 from scripts.linkedin_auth import PROFILE_DIR, _clear_lock
 from scripts.scrape_utils import parse_days_ago_en, days_ago_to_iso, now_iso
+from scripts.scraper_config import (
+    load_config, get_selector, get_config_value, build_extraction_js
+)
 from server.utils import categorize_level, has_ai_focus, level_rank
 
 # Search results cache directory
 SEARCH_CACHE_DIR = Path(__file__).parent.parent.parent / "data" / "runtime" / "searches"
+
+# Load config (None if missing or invalid - will use hardcoded defaults)
+_config = load_config("linkedin")
+
+# Config-driven selectors with hardcoded fallbacks
+CARD_SELECTOR = get_selector(_config, "card", ".job-card-container")
+NEXT_PAGE_SELECTOR = get_config_value(
+    _config, "pagination.selector", 'button[aria-label="View next page"]'
+)
 
 # LinkedIn GeoId codes for regions/countries
 # These map directly to LinkedIn's geoId URL parameter
@@ -102,6 +118,9 @@ EXTRACTION_JS = """
     return jobs;
 }
 """
+
+# Use config-driven extraction JS if available, otherwise hardcoded default
+_EXTRACTION_JS = build_extraction_js(_config, EXTRACTION_JS)
 
 # JS: Scroll the job list to trigger lazy loading.
 SCROLL_JS = """
@@ -333,7 +352,7 @@ def search_linkedin(
                         time.sleep(1)
 
                     # Extract jobs
-                    raw_jobs = page.evaluate(EXTRACTION_JS)
+                    raw_jobs = page.evaluate(_EXTRACTION_JS)
                     pages_fetched += 1
 
                     for job in raw_jobs:
@@ -342,7 +361,7 @@ def search_linkedin(
                             all_jobs.append(job)
 
                     # Try next page
-                    next_btn = page.query_selector('button[aria-label="View next page"]')
+                    next_btn = page.query_selector(NEXT_PAGE_SELECTOR)
                     if next_btn and next_btn.is_enabled():
                         next_btn.click()
                         time.sleep(2)
@@ -538,7 +557,7 @@ def scrape_top_picks(
                     time.sleep(1)
 
                 # Extract jobs - try multiple selectors
-                raw_jobs = page.evaluate(EXTRACTION_JS)
+                raw_jobs = page.evaluate(_EXTRACTION_JS)
 
                 # If no jobs found, try alternate selectors for recommended page
                 if not raw_jobs:

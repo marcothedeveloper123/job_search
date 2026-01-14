@@ -1,4 +1,8 @@
-"""Jobs.cz Search API with location support and filtering."""
+"""Jobs.cz Search API with location support and filtering.
+
+Config-driven with fallback to hardcoded defaults.
+Edit data/scrapers/jobscz.json to update selectors without code changes.
+"""
 
 import hashlib
 import json
@@ -12,10 +16,20 @@ import requests
 from bs4 import BeautifulSoup
 
 from scripts.scrape_utils import parse_days_ago_cs, days_ago_to_iso, now_iso
+from scripts.scraper_config import load_config, get_selector, get_config_value
 from server.utils import categorize_level, has_ai_focus, level_rank
 
 # Search results cache directory
 SEARCH_CACHE_DIR = Path(__file__).parent.parent.parent / "data" / "runtime" / "searches"
+
+# Load config (None if missing or invalid - will use hardcoded defaults)
+_config = load_config("jobscz")
+
+# Config-driven selectors with hardcoded fallbacks
+SEL_CARD = get_selector(_config, "card", ".SearchResultCard")
+SEL_TITLE = get_selector(_config, "title", ".SearchResultCard__titleLink")
+SEL_SALARY = get_selector(_config, "salary", "[data-test-ad-salary]")
+SEL_POSTED = get_selector(_config, "posted", ".SearchResultCard__status")
 
 # Location slugs for URL building
 # Location codes for jobs.cz locality[code] param
@@ -131,11 +145,11 @@ def _scrape_page(session: requests.Session, url: str) -> tuple[list[dict], bool]
     jobs = []
 
     # Find all job cards
-    cards = soup.select(".SearchResultCard")
+    cards = soup.select(SEL_CARD)
 
     for card in cards:
         # Get title link
-        title_link = card.select_one(".SearchResultCard__titleLink")
+        title_link = card.select_one(SEL_TITLE)
         if not title_link:
             continue
 
@@ -167,7 +181,7 @@ def _scrape_page(session: requests.Session, url: str) -> tuple[list[dict], bool]
 
         # Get salary if present
         salary = None
-        salary_el = card.select_one('[data-test-ad-salary]')
+        salary_el = card.select_one(SEL_SALARY)
         if salary_el:
             salary = _parse_salary_czk(salary_el.get_text(strip=True))
         else:
@@ -178,7 +192,7 @@ def _scrape_page(session: requests.Session, url: str) -> tuple[list[dict], bool]
 
         # Get posting date
         posted_text = None
-        status = card.select_one(".SearchResultCard__status")
+        status = card.select_one(SEL_POSTED)
         if status:
             posted_text = status.get_text(strip=True)
 

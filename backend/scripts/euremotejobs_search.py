@@ -1,4 +1,8 @@
-"""EU Remote Jobs Search API using Playwright."""
+"""EU Remote Jobs Search API using Playwright.
+
+Config-driven with fallback to hardcoded defaults.
+Edit data/scrapers/euremotejobs.json to update selectors without code changes.
+"""
 
 import hashlib
 import json
@@ -9,10 +13,22 @@ from typing import Optional
 from playwright.sync_api import sync_playwright
 
 from scripts.scrape_utils import parse_days_ago_en, days_ago_to_iso, now_iso
+from scripts.scraper_config import (
+    load_config, get_selector, get_config_value, build_extraction_js
+)
 from server.utils import categorize_level, has_ai_focus
 
 # Search results cache directory
 SEARCH_CACHE_DIR = Path(__file__).parent.parent.parent / "data" / "runtime" / "searches"
+
+# Load config (None if missing or invalid - will use hardcoded defaults)
+_config = load_config("euremotejobs")
+
+# Config-driven selectors with hardcoded fallbacks
+CARD_SELECTOR = get_selector(_config, "card", 'a[href*="/job/"]')
+LOAD_MORE_SELECTOR = get_config_value(
+    _config, "pagination.selector", 'a.load_more_jobs, button.load_more_jobs, [class*="load-more"]'
+)
 
 # Region slugs for URL parameter
 REGION_SLUGS = {
@@ -164,6 +180,9 @@ EXTRACT_JOBS_JS = """
 }
 """
 
+# Use config-driven extraction JS if available, otherwise hardcoded default
+_EXTRACT_JOBS_JS = build_extraction_js(_config, EXTRACT_JOBS_JS)
+
 
 def search_euremotejobs(
     query: str,
@@ -214,7 +233,7 @@ def search_euremotejobs(
 
                 for load_num in range(max_loads):
                     # Extract current jobs
-                    jobs = page.evaluate(EXTRACT_JOBS_JS)
+                    jobs = page.evaluate(_EXTRACT_JOBS_JS)
 
                     for job in jobs:
                         slug = job.get("slug")
@@ -223,7 +242,7 @@ def search_euremotejobs(
                             all_jobs.append(job)
 
                     # Try to load more
-                    load_more = page.query_selector('a.load_more_jobs, button.load_more_jobs, [class*="load-more"]')
+                    load_more = page.query_selector(LOAD_MORE_SELECTOR)
                     if load_more and load_more.is_visible():
                         load_more.click()
                         page.wait_for_timeout(2000)
