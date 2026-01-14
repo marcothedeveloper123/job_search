@@ -51,14 +51,11 @@ def _normalize_id(job_id: str) -> str:
     """Expand short IDs back to full: li_123 -> job_li_123, etc."""
     if job_id.startswith("job_"):
         return job_id
-    if job_id.startswith("li_"):
-        return "job_" + job_id
-    if job_id.startswith("er_"):
-        return "job_" + job_id
-    if job_id.startswith("cz_"):
-        return "job_" + job_id
-    if job_id.startswith("sj_"):
-        return "job_" + job_id
+    # Check for prefix_id pattern (e.g., li_123, in_abc, er_xyz)
+    if "_" in job_id:
+        parts = job_id.split("_", 1)
+        if len(parts) == 2 and len(parts[0]) >= 2 and parts[1]:
+            return "job_" + job_id
     # Assume bare numeric is LinkedIn
     if job_id.isdigit():
         return f"job_li_{job_id}"
@@ -413,6 +410,46 @@ def search_startupjobs(
     )
 
 
+def search_generic_board(
+    name: str,
+    query: str,
+    location: Optional[str] = None,
+    max_pages: int = 3,
+    exclude_locations: Optional[list[str]] = None,
+    exclude_companies: Optional[list[str]] = None,
+    min_level: Optional[str] = None,
+    ai_only: bool = False,
+) -> dict:
+    """Search a job board using config-driven generic scraper.
+
+    Use this for custom job boards configured via `jbs scraper create`.
+
+    Args:
+        name: Scraper name (e.g., "indeed_nl")
+        query: Search keywords
+        location: Location filter (optional)
+        max_pages: Pages to scrape (default: 3)
+        exclude_locations: Filter out jobs in these locations
+        exclude_companies: Filter out these companies
+        min_level: Minimum level (senior, staff, etc.)
+        ai_only: Only AI-focused jobs
+
+    Returns:
+        {"status": "ok", "jobs": [...], ...}
+    """
+    from scripts.generic_search import search_generic
+    return search_generic(
+        name=name,
+        query=query,
+        location=location,
+        max_pages=max_pages,
+        exclude_locations=exclude_locations,
+        exclude_companies=exclude_companies,
+        min_level=min_level,
+        ai_only=ai_only,
+    )
+
+
 def get_search_results(search_id: str) -> dict:
     """Retrieve cached search results by search_id."""
     return http.get(f"/api/search/{search_id}", error_code="JOB_NOT_FOUND")
@@ -421,21 +458,54 @@ def get_search_results(search_id: str) -> dict:
 # --- JD Scraping ---
 
 
-def _route_jd_endpoint(job_id: str) -> str:
-    """Route to correct JD endpoint based on job_id prefix."""
+def _get_scraper_by_prefix(prefix: str) -> str | None:
+    """Look up scraper name by job ID prefix."""
+    from pathlib import Path
+    import json
+    scrapers_dir = Path(__file__).parent.parent.parent / "data" / "scrapers"
+    if not scrapers_dir.exists():
+        return None
+    for cfg_file in scrapers_dir.glob("*.json"):
+        try:
+            config = json.loads(cfg_file.read_text())
+            cfg_prefix = config.get("id_prefix", "").rstrip("_")
+            if cfg_prefix == prefix:
+                return cfg_file.stem
+        except (json.JSONDecodeError, IOError):
+            pass
+    return None
+
+
+def _get_jd_endpoint(job_id: str) -> tuple[str, str | None]:
+    """Get JD endpoint and optional scraper name for job_id.
+
+    Returns (endpoint, scraper_name) where scraper_name is set for generic scrapers.
+    """
+    # Builtin endpoints
     if job_id.startswith("job_er_"):
-        return "/api/jd-er"
+        return "/api/jd-er", None
     elif job_id.startswith("job_cz_"):
-        return "/api/jd-cz"
+        return "/api/jd-cz", None
     elif job_id.startswith("job_sj_"):
-        return "/api/jd-sj"
-    return "/api/jd"  # LinkedIn default
+        return "/api/jd-sj", None
+    elif job_id.startswith("job_li_") or not job_id.startswith("job_"):
+        return "/api/jd", None
+
+    # Extract prefix and look up scraper
+    parts = job_id[4:].split("_", 1)
+    if len(parts) > 1:
+        prefix = parts[0]
+        scraper_name = _get_scraper_by_prefix(prefix)
+        if scraper_name:
+            return f"/api/jd-generic/{scraper_name}", scraper_name
+
+    return "/api/jd", None  # Fallback to LinkedIn
 
 
 def scrape_jd(job_id: str, full: bool = False) -> str | dict:
     """Scrape job description. Routes to correct source by job_id prefix."""
     job_id = _normalize_id(job_id)
-    endpoint = _route_jd_endpoint(job_id)
+    endpoint, _ = _get_jd_endpoint(job_id)
     result = http.get(f"{endpoint}/{job_id}", timeout=60, error_code="SCRAPE_FAILED")
     if full:
         return result
@@ -450,28 +520,46 @@ def scrape_jds(job_ids: list[str], full: bool = False) -> str | dict:
         return "Scraped 0 JDs" if not full else {"scraped": 0}
     # Normalize IDs (accept both short and full formats)
     job_ids = [_normalize_id(jid) for jid in job_ids]
-    # Group by source
-    by_source = {"li": [], "er": [], "cz": [], "sj": []}
+
+    # Builtin endpoints (have dedicated Python scrapers)
+    builtin_endpoints = {
+        "li": "/api/jd/batch",
+        "er": "/api/jd-er/batch",
+        "cz": "/api/jd-cz/batch",
+        "sj": "/api/jd-sj/batch",
+    }
+
+    # Group by source prefix
+    by_source: dict[str, list[str]] = {}
     for jid in job_ids:
-        if jid.startswith("job_er_"):
-            by_source["er"].append(jid)
-        elif jid.startswith("job_cz_"):
-            by_source["cz"].append(jid)
-        elif jid.startswith("job_sj_"):
-            by_source["sj"].append(jid)
+        # Extract prefix (e.g., "in" from "job_in_abc123")
+        if jid.startswith("job_"):
+            parts = jid[4:].split("_", 1)
+            prefix = parts[0] if len(parts) > 1 else "li"
         else:
-            by_source["li"].append(jid)
+            prefix = "li"
+        by_source.setdefault(prefix, []).append(jid)
+
     # Scrape each source
     total_scraped = 0
     all_results = []
-    endpoints = {"li": "/api/jd/batch", "er": "/api/jd-er/batch", "cz": "/api/jd-cz/batch", "sj": "/api/jd-sj/batch"}
-    for src, ids in by_source.items():
-        if ids:
-            result = http.post(endpoints[src], timeout=300, error_code="SCRAPE_FAILED", json={"job_ids": ids})
-            # Handle both "scraped" and "succeeded" field names
-            total_scraped += result.get("scraped", result.get("succeeded", 0))
-            if full:
-                all_results.extend(result.get("results", []))
+    for prefix, ids in by_source.items():
+        if not ids:
+            continue
+        if prefix in builtin_endpoints:
+            # Use builtin scraper
+            result = http.post(builtin_endpoints[prefix], timeout=300, error_code="SCRAPE_FAILED", json={"job_ids": ids})
+        else:
+            # Look up config and use generic scraper
+            scraper_name = _get_scraper_by_prefix(prefix)
+            if scraper_name:
+                result = http.post(f"/api/jd-generic/{scraper_name}/batch", timeout=300, error_code="SCRAPE_FAILED", json={"job_ids": ids})
+            else:
+                # Unknown prefix, skip
+                continue
+        total_scraped += result.get("scraped", result.get("succeeded", 0))
+        if full:
+            all_results.extend(result.get("results", []))
     if full:
         return {"scraped": total_scraped, "results": all_results}
     return f"Scraped {total_scraped} JDs"
