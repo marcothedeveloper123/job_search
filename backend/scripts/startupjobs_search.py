@@ -1,4 +1,8 @@
-"""StartupJobs.cz Search API."""
+"""StartupJobs.cz Search API.
+
+Config-driven with fallback to hardcoded defaults.
+Edit data/scrapers/startupjobs.json to update API URL without code changes.
+"""
 
 import hashlib
 import json
@@ -9,11 +13,22 @@ from urllib.parse import urlencode
 import requests
 
 from scripts.scrape_utils import parse_iso_date, now_iso
+from scripts.scraper_config import load_config, get_config_value
 from server.utils import categorize_level, has_ai_focus
 
 
 # Search results cache directory
 SEARCH_CACHE_DIR = Path(__file__).parent.parent.parent / "data" / "runtime" / "searches"
+
+# Load config (None if missing or invalid - will use hardcoded defaults)
+_config = load_config("startupjobs")
+
+# Config-driven values with hardcoded fallbacks
+API_URL = get_config_value(_config, "api_url", "https://core.startupjobs.cz/api/search/offers")
+JOB_URL_TEMPLATE = get_config_value(
+    _config, "url_pattern.job_url_template",
+    "https://www.startupjobs.cz/nabidka/{id}/{slug}"
+)
 
 # Location presets with coordinates
 LOCATION_PRESETS = {
@@ -152,7 +167,7 @@ def search_startupjobs(
         sen = SENIORITY_MAP.get(seniority.lower(), seniority)
         params.append(("seniority[]", sen))
 
-    url = "https://core.startupjobs.cz/api/search/offers?" + urlencode(params)
+    url = f"{API_URL}?{urlencode(params)}"
 
     session = requests.Session()
     session.headers.update({
@@ -191,10 +206,25 @@ def search_startupjobs(
         company_obj = item.get("company", {})
         company = company_obj.get("name", "") if isinstance(company_obj, dict) else str(company_obj)
 
-        # Location from location array (objects with name)
-        location_arr = item.get("location", [])
+        # Location from locations array (API uses plural)
+        # Format: [{name: {cs: "Praha", en: "Prague"}, ...}]
+        location_arr = item.get("locations", []) or item.get("location", [])
         if isinstance(location_arr, list):
-            loc_names = [loc.get("name", {}).get("cs", "") if isinstance(loc, dict) else str(loc) for loc in location_arr]
+            loc_names = []
+            for loc in location_arr:
+                if isinstance(loc, dict):
+                    # New format: {cs: "Praha", en: "Prague"}
+                    if "cs" in loc or "en" in loc:
+                        loc_names.append(loc.get("cs") or loc.get("en") or "")
+                    # Old format: {name: {cs: "Praha"}}
+                    elif "name" in loc:
+                        name_obj = loc.get("name", {})
+                        if isinstance(name_obj, dict):
+                            loc_names.append(name_obj.get("cs") or name_obj.get("en") or "")
+                        else:
+                            loc_names.append(str(name_obj) if name_obj else "")
+                else:
+                    loc_names.append(str(loc) if loc else "")
             location_str = ", ".join(filter(None, loc_names)) or None
         else:
             location_str = None
@@ -211,8 +241,12 @@ def search_startupjobs(
         salary_obj = item.get("salary", {})
         salary = _parse_salary(salary_obj) if salary_obj else None
 
-        # URL from company slug and displayId
-        full_url = f"https://www.startupjobs.cz/nabidka/{display_id}" if display_id else None
+        # URL from config template - supports {id} and {slug} placeholders
+        slug = item.get("slug", "")
+        if display_id:
+            full_url = JOB_URL_TEMPLATE.replace("{id}", str(display_id)).replace("{slug}", slug)
+        else:
+            full_url = None
 
         # Posted date from boostedAt
         posted = item.get("boostedAt")

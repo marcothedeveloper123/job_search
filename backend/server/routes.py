@@ -290,6 +290,7 @@ def ingest_jobs(req: IngestJobsRequest):
 
         added = []
         skipped = []
+        urls_updated = False
 
         for j in req.jobs:
             # Generate ID if not provided
@@ -306,6 +307,13 @@ def ingest_jobs(req: IngestJobsRequest):
                 dedupe_key = None  # No deduplication
 
             if dedupe_key and dedupe_key in existing_keys:
+                # Update URL if we have a better one (e.g., with slug)
+                if req.dedupe_by == "job_id" and job_id in existing_jobs:
+                    new_url = j.get("url", "")
+                    old_url = existing_jobs[job_id].url or ""
+                    if new_url and len(new_url) > len(old_url):
+                        existing_jobs[job_id].url = new_url
+                        urls_updated = True
                 skipped.append({"job_id": job_id, "reason": "duplicate"})
                 continue
 
@@ -341,9 +349,10 @@ def ingest_jobs(req: IngestJobsRequest):
             )
             added.append(new_job)
 
-        # Append new jobs to existing
+        # Append new jobs and/or save URL updates
         if added:
             existing.jobs.extend(added)
+        if added or urls_updated:
             save_results(existing)
             broadcast_jobs_updated()
 
@@ -896,18 +905,42 @@ def unified_search(req: UnifiedSearchRequest):
     all_jobs = []
     errors = []
 
+    # Check for scraper configs
+    scrapers_dir = Path(__file__).parent.parent.parent / "data" / "scrapers"
+
+    # Python script fallbacks for built-in sources
+    builtin_fallbacks = {
+        "linkedin": lambda: do_search(query=req.query, region=req.location, days=req.days),
+        "jobscz": lambda: do_search_jobscz(query=req.query, location=req.location, days=req.days),
+        "startupjobs": lambda: do_search_startupjobs(query=req.query, location=req.location, days=req.days),
+        "euremotejobs": lambda: do_search_euremotejobs(query=req.query, location=req.location, days=req.days),
+    }
+
     # Search each source
     for source in req.sources:
-        if source == "linkedin":
-            result = do_search(query=req.query, region=req.location, days=req.days)
-        elif source == "jobscz":
-            result = do_search_jobscz(query=req.query, location=req.location, days=req.days)
-        elif source == "startupjobs":
-            result = do_search_startupjobs(query=req.query, location=req.location, days=req.days)
-        elif source == "euremotejobs":
-            result = do_search_euremotejobs(query=req.query, location=req.location, days=req.days)
+        config_path = scrapers_dir / f"{source}.json"
+
+        # Check if config exists and what engine it uses
+        use_generic = False
+        if config_path.exists():
+            try:
+                import json
+                config = json.loads(config_path.read_text())
+                # engine: "python" means use builtin fallback, not generic scraper
+                use_generic = config.get("engine") != "python"
+            except (json.JSONDecodeError, IOError):
+                use_generic = True
+
+        if use_generic and config_path.exists():
+            # Config exists with non-python engine → use generic scraper
+            from scripts.generic_search import search_generic
+            result = search_generic(source, query=req.query, location=req.location)
+        elif source in builtin_fallbacks:
+            # No config or engine=python → use Python script
+            result = builtin_fallbacks[source]()
         else:
-            errors.append(f"Unknown source: {source}")
+            # Unknown source with no config
+            errors.append(f"Unknown source: {source} (no config file)")
             continue
 
         if result.get("status") == "error":
@@ -934,34 +967,47 @@ def unified_search(req: UnifiedSearchRequest):
         if filters:
             all_jobs, filtered_count = _apply_hard_filters(all_jobs, filters)
 
-    # Dedupe against existing board
+    # Dedupe against existing board and update URLs for existing jobs
     job_ids, title_keys = _get_existing_job_keys()
     before_dedupe = len(all_jobs)
+
+    # Update URLs for duplicate jobs (e.g., startupjobs URLs now include slug)
+    existing = get_results()
+    existing_jobs = {j.job_id: j for j in existing.jobs}
+    urls_updated = False
+    for j in all_jobs:
+        jid = j.get("job_id", "")
+        if jid in existing_jobs:
+            new_url = j.get("url", "")
+            old_url = existing_jobs[jid].url or ""
+            if new_url and len(new_url) > len(old_url):
+                existing_jobs[jid].url = new_url
+                urls_updated = True
+
     all_jobs = _filter_existing(all_jobs, job_ids, title_keys)
     duplicates = before_dedupe - len(all_jobs)
 
     # Auto-ingest remaining jobs
     added = 0
-    if all_jobs:
-        existing = get_results()
-        for j in all_jobs:
-            posted = j.get("posted")
-            new_job = DataJob(
-                job_id=j.get("job_id", generate_job_id(j.get("url", ""), j.get("title", ""), j.get("company", ""))),
-                title=j.get("title", ""),
-                company=j.get("company", ""),
-                location=j.get("location"),
-                salary=j.get("salary"),
-                url=j.get("url", ""),
-                source=j.get("source", "unknown"),
-                level=j.get("level") or categorize_level(j.get("title", "")),
-                ai_focus=j.get("ai_focus") if j.get("ai_focus") is not None else has_ai_focus(j.get("title", "")),
-                posted=posted,
-                days_ago=j.get("days_ago") if j.get("days_ago") is not None else compute_days_ago(posted),
-                ingested_at=datetime.utcnow().isoformat() + "Z",
-            )
-            existing.jobs.append(new_job)
-            added += 1
+    for j in all_jobs:
+        posted = j.get("posted")
+        new_job = DataJob(
+            job_id=j.get("job_id", generate_job_id(j.get("url", ""), j.get("title", ""), j.get("company", ""))),
+            title=j.get("title", ""),
+            company=j.get("company", ""),
+            location=j.get("location"),
+            salary=j.get("salary"),
+            url=j.get("url", ""),
+            source=j.get("source", "unknown"),
+            level=j.get("level") or categorize_level(j.get("title", "")),
+            ai_focus=j.get("ai_focus") if j.get("ai_focus") is not None else has_ai_focus(j.get("title", "")),
+            posted=posted,
+            days_ago=j.get("days_ago") if j.get("days_ago") is not None else compute_days_ago(posted),
+            ingested_at=datetime.utcnow().isoformat() + "Z",
+        )
+        existing.jobs.append(new_job)
+        added += 1
+    if added or urls_updated:
         save_results(existing)
         broadcast_jobs_updated()
 
@@ -1073,7 +1119,10 @@ def scrape_jds_cz(req: ScrapeJdsRequest):
 def scrape_jd_sj(job_id: str):
     """Scrape job description from startupjobs.cz and persist to job record."""
     job_id = normalize_job_id(job_id)
-    result = do_scrape_jd_sj(job_id)
+    # Look up stored URL (which includes slug)
+    jobs = get_jobs_by_ids([job_id])
+    stored_url = jobs[0].url if jobs else None
+    result = do_scrape_jd_sj(job_id, url=stored_url)
     if result.get("status") == "ok":
         data_update_job(result["job_id"], {
             "jd_text": result["jd_text"],
@@ -1087,7 +1136,10 @@ def scrape_jd_sj(job_id: str):
 def scrape_jds_sj(req: ScrapeJdsRequest):
     """Batch scrape job descriptions from startupjobs.cz and persist to job records."""
     job_ids = [normalize_job_id(jid) for jid in req.job_ids]
-    result = do_scrape_jds_sj(job_ids)
+    # Look up stored URLs
+    jobs = get_jobs_by_ids(job_ids)
+    url_map = {j.job_id: j.url for j in jobs}
+    result = do_scrape_jds_sj(job_ids, url_map=url_map)
     if result.get("status") == "ok":
         for item in result.get("results", []):
             if item.get("jd_text"):
@@ -1121,6 +1173,41 @@ def scrape_jds_er(req: ScrapeJdsRequest):
     """Batch scrape job descriptions from euremotejobs.com and persist to job records."""
     job_ids = [normalize_job_id(jid) for jid in req.job_ids]
     result = do_scrape_jds_er(job_ids)
+    if result.get("status") == "ok":
+        for item in result.get("results", []):
+            if item.get("jd_text"):
+                data_update_job(item["job_id"], {
+                    "jd_text": item["jd_text"],
+                    "jd_scraped_at": item["scraped_at"],
+                })
+        broadcast_jobs_updated()
+    return result
+
+
+# --- Generic JD Scraping Routes ---
+
+
+@router.get("/jd-generic/{scraper_name}/{job_id}")
+def scrape_jd_generic(scraper_name: str, job_id: str):
+    """Scrape job description using config-driven generic scraper."""
+    from scripts.generic_jd import scrape_jd_generic as do_scrape_jd_generic
+    job_id = normalize_job_id(job_id)
+    result = do_scrape_jd_generic(scraper_name, job_id)
+    if result.get("status") == "ok" and result.get("jd_text"):
+        data_update_job(result["job_id"], {
+            "jd_text": result["jd_text"],
+            "jd_scraped_at": result["scraped_at"],
+        })
+        broadcast_jobs_updated()
+    return result
+
+
+@router.post("/jd-generic/{scraper_name}/batch")
+def scrape_jds_generic(scraper_name: str, req: ScrapeJdsRequest):
+    """Batch scrape job descriptions using config-driven generic scraper."""
+    from scripts.generic_jd import scrape_jds_generic as do_scrape_jds_generic
+    job_ids = [normalize_job_id(jid) for jid in req.job_ids]
+    result = do_scrape_jds_generic(scraper_name, job_ids)
     if result.get("status") == "ok":
         for item in result.get("results", []):
             if item.get("jd_text"):
