@@ -148,6 +148,70 @@ PYEOF
 fi
 
 echo ""
+echo "Installing skill..."
+
+# Find Claude Desktop skills directory
+SKILLS_MANIFEST=$(find "$HOME/Library/Application Support/Claude/local-agent-mode-sessions/skills-plugin" -name "manifest.json" 2>/dev/null | head -1)
+
+if [ -n "$SKILLS_MANIFEST" ]; then
+    SKILLS_DIR=$(dirname "$SKILLS_MANIFEST")/skills
+
+    # Unzip skill to skills directory
+    rm -rf "$SKILLS_DIR/job-search"
+    unzip -q job-search.skill -d "$SKILLS_DIR/job-search"
+
+    # Update manifest.json
+    python3 << PYEOF
+import json
+from datetime import datetime
+
+manifest_path = "$SKILLS_MANIFEST"
+with open(manifest_path) as f:
+    manifest = json.load(f)
+
+# Read skill metadata from SKILL.md frontmatter
+skill_md_path = "$SKILLS_DIR/job-search/SKILL.md"
+with open(skill_md_path) as f:
+    content = f.read()
+
+# Parse YAML frontmatter
+import re
+frontmatter_match = re.search(r'^---\s*\n(.*?)\n---', content, re.DOTALL)
+if frontmatter_match:
+    fm = frontmatter_match.group(1)
+    name_match = re.search(r'^name:\s*["\']?(.+?)["\']?\s*$', fm, re.MULTILINE)
+    desc_match = re.search(r'^description:\s*["\']?(.+?)["\']?\s*$', fm, re.MULTILINE)
+    name = name_match.group(1) if name_match else "job-search"
+    description = desc_match.group(1) if desc_match else ""
+else:
+    name = "job-search"
+    description = ""
+
+# Remove existing entry if present
+manifest["skills"] = [s for s in manifest["skills"] if s.get("name") != "job-search"]
+
+# Add new entry
+manifest["skills"].insert(0, {
+    "skillId": "skill_jobsearch_user",
+    "name": name,
+    "description": description,
+    "creatorType": "user",
+    "updatedAt": datetime.utcnow().isoformat() + "Z",
+    "enabled": True
+})
+
+manifest["lastUpdated"] = int(datetime.utcnow().timestamp() * 1000)
+
+with open(manifest_path, "w") as f:
+    json.dump(manifest, f, indent=2)
+print("✓ Skill installed")
+PYEOF
+else
+    echo "Claude Desktop skills folder not found."
+    echo "Install skill manually: drag job-search.skill into Claude Desktop settings."
+fi
+
+echo ""
 echo "=========================================="
 echo "  Setup Complete!"
 echo "=========================================="
@@ -155,15 +219,6 @@ echo ""
 echo "NEXT STEPS:"
 echo ""
 echo "1. RESTART YOUR TERMINAL (or run: source ~/.zshrc)"
-echo ""
-echo "2. INSTALL THE SKILL IN CLAUDE DESKTOP:"
-echo "   → Open Claude Desktop"
-echo "   → Go to Settings → Capabilities"
-echo "   → Drag this file into the window:"
-echo "     $(pwd)/job-search.skill"
-echo ""
-echo "3. RESTART CLAUDE DESKTOP"
-echo ""
-echo "4. TELL CLAUDE: \"search for jobs\""
-echo "   Claude will start the server and guide you through setup."
+echo "2. RESTART CLAUDE DESKTOP"
+echo "3. TELL CLAUDE: \"search for jobs\""
 echo ""
