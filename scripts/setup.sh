@@ -79,7 +79,7 @@ PROJECT_DIR=$(pwd)
 
 cat > ~/bin/jbs << SCRIPT
 #!/bin/bash
-cd "$PROJECT_DIR" && $POETRY_PATH run python -m job_search.cli "\$@"
+cd "$PROJECT_DIR" && "$POETRY_PATH" run python -m job_search.cli "\$@"
 SCRIPT
 chmod +x ~/bin/jbs
 
