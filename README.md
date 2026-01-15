@@ -1,18 +1,14 @@
 # Job Search Assistant
 
-Turn Claude Desktop into your job search consultant. Tell Claude what you're looking for, and it searches job boards, filters against your criteria, researches companies, and curates opportunities worth your time. A companion web UI lets you review Claude's selections and track your pipeline.
+Job searching is exhausting. You scroll through hundreds of listings, most irrelevant. You research companies manually. You lose track of what you've applied to.
+
+This skill turns Claude into your job search partner. Tell Claude about your background and what you're looking for—it builds a profile of your experience, preferences, and red flags. Then it searches across multiple job boards, filters out the noise, researches companies, and surfaces only the opportunities worth your time.
+
+A companion web UI shows Claude's selections and research. You review, Claude refines. When you're ready to apply, Claude helps with gap analysis, CV tailoring, and interview prep.
 
 ![Job Search Assistant](docs/screenshot.png)
 
 > **Note:** This skill works best with **Claude Opus 4.5**, which has the strongest understanding of how to apply skills effectively.
-
-## Features
-
-- **Multi-board Search**: LinkedIn, Jobs.cz, StartupJobs, EURemoteJobs — with level, location, and AI/ML filters
-- **Claude Integration**: Claude reviews jobs against your profile and criteria
-- **Deep Dives**: Structured research on promising opportunities (company stage, role scope, fit analysis)
-- **Application Prep**: Gap analysis, interview prep, salary research
-- **Web UI**: Review Claude's selections and research at http://localhost:8000
 
 ## Requirements
 
