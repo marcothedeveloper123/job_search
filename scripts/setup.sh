@@ -107,10 +107,10 @@ try:
     missing = []
     if "desktop-commander" not in servers:
         missing.append("desktop-commander")
-    if "browsermcp" not in servers and "playwright" not in servers:
-        missing.append("browser")
+    if "playwright" not in servers:
+        missing.append("playwright")
     print(" ".join(missing))
-except: print("desktop-commander browser")
+except: print("desktop-commander playwright")
 PYEOF
 )
 
@@ -124,10 +124,9 @@ PYEOF
             fi
         fi
 
-        if [[ "$MISSING" == *"browser"* ]]; then
-            read -p "Install Playwright MCP (for web research)? [y/N] " -n 1 -r; echo
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                python3 << 'PYEOF'
+        if [[ "$MISSING" == *"playwright"* ]]; then
+            echo "Installing Playwright MCP..."
+            python3 << 'PYEOF'
 import json, os
 config_path = os.path.expanduser("~/Library/Application Support/Claude/claude_desktop_config.json")
 with open(config_path) as f:
@@ -140,7 +139,6 @@ with open(config_path, "w") as f:
     json.dump(config, f, indent=2)
 print("✓ Added Playwright MCP")
 PYEOF
-            fi
         fi
         echo ""
         echo "Restart Claude Desktop to apply MCP changes."

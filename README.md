@@ -52,7 +52,7 @@ jbs scraper test <n> <query>  # Test scraper
 Ask Claude: "Add support for nl.indeed.com"
 
 Claude will:
-1. Inspect the site's DOM structure (via Browser MCP)
+1. Inspect the site's DOM structure (via Playwright MCP)
 2. Create and configure the scraper:
    ```bash
    jbs scraper create indeed_nl

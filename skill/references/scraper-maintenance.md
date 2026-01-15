@@ -45,7 +45,7 @@ page="100+ jobs..."      ← Good, page loaded.
 
 ### 2. Add Selectors, Test Each
 
-Use Browser MCP to find selectors on the live site, then test after each one:
+Use Playwright MCP to find selectors on the live site, then test after each one:
 
 ```bash
 jbs scraper set myboard selectors.card ".job-listing"
@@ -174,7 +174,7 @@ All scrapers are config-driven. **Config supersedes hardcoded values.** Fix via 
 jbs scraper test myboard "product manager"
 # jobs=0 means selectors or URL pattern broken
 
-# 2. Inspect new DOM with Browser MCP, then update config
+# 2. Inspect new DOM with Playwright MCP, then update config
 jbs scraper set myboard selectors.card ".NEW_CARD_SELECTOR"
 jbs scraper set myboard selectors.title ".NEW_TITLE_SELECTOR"
 
@@ -192,7 +192,7 @@ jbs scrape sj_12345
 # ERROR: 404 Not Found
 
 # 2. Find new URL format
-# Use Browser MCP to navigate to a job and check the URL pattern
+# Use Playwright MCP to navigate to a job and check the URL pattern
 # Example: site changed from /job/{id} to /job/{id}/{slug}
 
 # 3. Update URL template (supports {id} and {slug} placeholders)
@@ -217,7 +217,7 @@ jbs scrape sj_12345
 jbs scraper test-jd myboard job_12345
 # JD_NOT_FOUND = selectors don't match
 
-# 2. Inspect job detail page with Browser MCP, find new selectors
+# 2. Inspect job detail page with Playwright MCP, find new selectors
 jbs scraper set myboard jd.selectors ".new-description,article,.job-content"
 
 # 3. Verify

@@ -24,7 +24,7 @@ File reads: `mcp__desktop-commander__read_file` with absolute path to the projec
 - **No Python calls** - Use `jbs` CLI only.
 - **No direct HTTP** - Don't call localhost:8000 directly. Use `jbs` CLI only.
 - **No invented tools** - If a tool doesn't exist, don't call it. Use `jbs --help` to see available commands.
-- **Browser MCP required for research** - Deep dives and application prep require online research (Glassdoor, LinkedIn, company sites). Use Browser MCP for all web lookups. If Browser MCP is unavailable, stop research and ask user to reconnect.
+- **Playwright MCP required for research** - Deep dives and application prep require online research (Glassdoor, LinkedIn, company sites). Use Playwright MCP for all web lookups. If Playwright MCP is unavailable, stop research and ask user to reconnect.
 
 # Startup
 
@@ -135,7 +135,7 @@ These reference files are bundled inside this skill. Read them from the skill's 
 |-------|-----|
 | `AUTH_FAILED: ProcessSingleton` / browser profile locked | Run `pkill -f "Google Chrome for Testing"` then retry |
 | `auth: no` | Run `jbs login` to authenticate with LinkedIn |
-| Browser MCP unavailable / web lookup fails | Stop research. Tell user: "Browser MCP is disconnected. Please reconnect it so I can continue research." |
+| Playwright MCP unavailable / web lookup fails | Stop research. Tell user: "Playwright MCP is disconnected. Please reconnect it so I can continue research." |
 
 # Commands
 
