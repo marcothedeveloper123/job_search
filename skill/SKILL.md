@@ -98,7 +98,7 @@ Run `jbs filter` to see current settings. Update with:
 
 **Source selection (Step 3):** LinkedIn is always searched. Run `jbs sources` to see additional boards and their `when_to_use` descriptions. Add relevant sources based on user's query/location (e.g., Netherlands → `--sources=indeed_nl`, Prague → `--sources=jobscz,startupjobs`).
 
-**If `auth: no`**: `jbs login`. **If connection refused**: `poetry run python -m server.app`
+**If `auth: no`**: `jbs login`. Server auto-starts on first command.
 
 # Profile Files
 
@@ -134,7 +134,6 @@ These reference files are bundled inside this skill. Read them from the skill's 
 | Error | Fix |
 |-------|-----|
 | `AUTH_FAILED: ProcessSingleton` / browser profile locked | Run `pkill -f "Google Chrome for Testing"` then retry |
-| `Connection refused` | Start server: `poetry run python -m server.app` |
 | `auth: no` | Run `jbs login` to authenticate with LinkedIn |
 | Browser MCP unavailable / web lookup fails | Stop research. Tell user: "Browser MCP is disconnected. Please reconnect it so I can continue research." |
 
