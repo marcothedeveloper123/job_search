@@ -16,11 +16,10 @@ Turn Claude Desktop into your job search consultant. Tell Claude what you're loo
 
 ## Requirements
 
-- Python 3.11+
-- Node.js 18+
+- macOS
 - [Claude Desktop](https://claude.ai/download)
-- [Desktop Commander MCP](https://desktopcommander.app/) — For Claude to run CLI commands
-- [Browser MCP](https://browsermcp.io/) or [Playwright MCP](https://github.com/anthropics/claude-mcp/tree/main/packages/mcp-server-playwright) — For online research
+
+The setup script auto-installs everything else (Homebrew, Python, Node.js, Poetry).
 
 ## Install
 
@@ -28,30 +27,19 @@ Turn Claude Desktop into your job search consultant. Tell Claude what you're loo
 git clone https://github.com/marcothedeveloper123/job_search.git
 cd job_search
 ./scripts/setup.sh
-source ~/.zshrc
 ```
 
-The setup script:
-- Installs Python dependencies (Poetry)
-- Builds the frontend
-- Packages the skill (`job-search.skill`)
-- Adds `jbs` CLI to your PATH
-- Optionally installs missing MCPs
-
-### Install the Skill
-
-After running setup, install the skill in Claude Desktop:
-
-1. Open Claude Desktop → Settings → Capabilities
-2. Drag `job-search.skill` into the window
+Then:
+1. Restart your terminal
+2. Open Claude Desktop → Settings → Capabilities
+3. Drag `job-search.skill` into the window
+4. Restart Claude Desktop
 
 ## Usage
 
-1. Start the server: `poetry run python -m server.app`
-2. Open Claude Desktop and say "search for jobs" to activate the skill
-3. Review results at http://localhost:8000
+Tell Claude: "search for jobs"
 
-Claude will guide you through creating your profile on first use.
+Claude will start the server and guide you through setup on first use. Review results at http://localhost:8000.
 
 ## Adding Job Boards
 

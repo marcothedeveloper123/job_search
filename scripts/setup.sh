@@ -3,6 +3,41 @@ set -e
 
 cd "$(dirname "$0")/.."
 
+echo "=== Job Search Assistant Setup ==="
+echo ""
+
+# Check for Homebrew
+if ! command -v brew &> /dev/null; then
+    echo "Homebrew not found. Installing..."
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+    # Add Homebrew to PATH for this session
+    if [[ -f /opt/homebrew/bin/brew ]]; then
+        eval "$(/opt/homebrew/bin/brew shellenv)"
+    elif [[ -f /usr/local/bin/brew ]]; then
+        eval "$(/usr/local/bin/brew shellenv)"
+    fi
+fi
+
+# Check for Python 3.11+
+if ! command -v python3 &> /dev/null; then
+    echo "Installing Python..."
+    brew install python@3.12
+fi
+
+# Check for Node.js
+if ! command -v node &> /dev/null; then
+    echo "Installing Node.js..."
+    brew install node
+fi
+
+# Check for Poetry
+if ! command -v poetry &> /dev/null; then
+    echo "Installing Poetry..."
+    brew install poetry
+fi
+
+echo ""
 echo "Installing backend dependencies..."
 poetry install
 
@@ -113,22 +148,22 @@ PYEOF
 fi
 
 echo ""
-echo "=== Skill Installation ==="
-echo "Install the job-search skill in Claude Desktop:"
-echo "  1. Open Claude Desktop → Settings → Capabilities"
-echo "  2. Drag job-search.skill into the window"
+echo "=========================================="
+echo "  Setup Complete!"
+echo "=========================================="
 echo ""
-echo "Or double-click: $(pwd)/job-search.skill"
+echo "NEXT STEPS:"
 echo ""
-
-echo "=== Next Steps ==="
-echo "1. Source your shell config:  source ~/.zshrc"
-echo "2. Restart Claude Desktop (if MCP changes were made)"
-echo "3. Start the server:  poetry run python -m server.app"
-echo "4. Open http://localhost:8000"
+echo "1. RESTART YOUR TERMINAL (or run: source ~/.zshrc)"
 echo ""
-read -p "Set up LinkedIn auth now? [y/N] " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    poetry run python backend/scripts/linkedin_scraper.py --login
-fi
+echo "2. INSTALL THE SKILL IN CLAUDE DESKTOP:"
+echo "   → Open Claude Desktop"
+echo "   → Go to Settings → Capabilities"
+echo "   → Drag this file into the window:"
+echo "     $(pwd)/job-search.skill"
+echo ""
+echo "3. RESTART CLAUDE DESKTOP"
+echo ""
+echo "4. TELL CLAUDE: \"search for jobs\""
+echo "   Claude will start the server and guide you through setup."
+echo ""
