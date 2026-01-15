@@ -20,10 +20,51 @@ Usage:
 from __future__ import annotations
 
 import json
+import subprocess
+import time
 from pathlib import Path
 from typing import Literal, Optional
 
 from job_search import http
+
+
+def _ensure_server() -> str | None:
+    """Start server if not running. Returns error message or None on success."""
+    import requests
+
+    # Check if server is already running
+    try:
+        requests.get("http://localhost:8000/api/status", timeout=2)
+        return None  # Already running
+    except requests.RequestException:
+        pass  # Not running, start it
+
+    # Find project root (where pyproject.toml is)
+    project_root = Path(__file__).parent.parent.parent
+    if not (project_root / "pyproject.toml").exists():
+        return "Cannot find project root"
+
+    # Start server in background
+    log_file = Path("/tmp/job-search-server.log")
+    with open(log_file, "w") as f:
+        subprocess.Popen(
+            ["poetry", "run", "python", "-m", "server.app"],
+            cwd=project_root,
+            stdout=f,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+
+    # Wait for server to come up
+    for _ in range(10):
+        time.sleep(0.5)
+        try:
+            requests.get("http://localhost:8000/api/status", timeout=2)
+            return None  # Started successfully
+        except requests.RequestException:
+            continue
+
+    return "Server failed to start (check /tmp/job-search-server.log)"
 
 
 # --- Terse Output Formatters ---
@@ -123,8 +164,14 @@ def _fmt_application(a: dict) -> str:
 def status(full: bool = False) -> str | dict:
     """Combined health check: server running + LinkedIn auth.
 
+    Auto-starts server if not running.
     Returns (terse): "OK | auth: yes | user: {name}" or "ERROR: ..."
     """
+    # Auto-start server if needed
+    err = _ensure_server()
+    if err:
+        return {"status": "error", "error": err} if full else f"ERROR: {err}"
+
     result = http.get("/api/status", timeout=30, error_code="SERVER_ERROR")
     if full:
         return result
