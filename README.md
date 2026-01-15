@@ -31,9 +31,7 @@ cd job_search
 
 Then:
 1. Restart your terminal
-2. Open Claude Desktop → Settings → Capabilities
-3. Drag `job-search.skill` into the window
-4. Restart Claude Desktop
+2. Restart Claude Desktop
 
 ## Usage
 
