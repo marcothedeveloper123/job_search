@@ -24,7 +24,7 @@ The setup script auto-installs everything else (Homebrew, Python, Node.js, Poetr
 ## Install
 
 1. [Download ZIP](https://github.com/marcothedeveloper123/job_search/archive/refs/heads/main.zip) and unzip it
-2. Open Terminal, then drag the `job_search-main` folder into the window and press Enter
+2. Open Terminal, type `cd ` (with a space), drag the folder into the window, press Enter
 3. Run: `./scripts/setup.sh`
 
 Then quit Terminal and restart Claude Desktop.
