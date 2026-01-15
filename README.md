@@ -29,9 +29,7 @@ cd job_search
 ./scripts/setup.sh
 ```
 
-Then:
-1. Restart your terminal
-2. Restart Claude Desktop
+Then restart Claude Desktop.
 
 ## Usage
 
