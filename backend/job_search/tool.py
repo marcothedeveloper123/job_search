@@ -56,9 +56,9 @@ def _ensure_server() -> str | None:
     """Start server if not running. Returns error message or None on success."""
     import requests
 
-    # Check if server is already running and responding
+    # Check if server is already running (use /health, not /api/status which is slow)
     try:
-        requests.get("http://localhost:8000/api/status", timeout=2)
+        requests.get("http://localhost:8000/health", timeout=2)
         return None  # Already running
     except requests.RequestException:
         pass  # Not running or not responding
@@ -86,7 +86,7 @@ def _ensure_server() -> str | None:
     for _ in range(10):
         time.sleep(0.5)
         try:
-            requests.get("http://localhost:8000/api/status", timeout=2)
+            requests.get("http://localhost:8000/health", timeout=2)
             return None  # Started successfully
         except requests.RequestException:
             continue
