@@ -10,10 +10,12 @@ PROFILE_DIR = Path(__file__).parent.parent.parent / "data" / "linkedin_profile"
 
 
 def _clear_lock():
-    """Clear stale Chromium lock file."""
+    """Clear stale Chromium lock file (may be a broken symlink)."""
     lock_file = PROFILE_DIR / "SingletonLock"
-    if lock_file.exists():
-        lock_file.unlink()
+    try:
+        lock_file.unlink(missing_ok=True)
+    except OSError:
+        pass  # Race condition or permission issue - browser will report if still broken
 
 
 def check_auth_status() -> dict:
