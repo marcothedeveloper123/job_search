@@ -20,6 +20,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import time
@@ -29,16 +30,41 @@ from typing import Literal, Optional
 from job_search import http
 
 
+def _kill_stale_server() -> None:
+    """Kill any process using port 8000 that isn't responding."""
+    import signal
+
+    try:
+        result = subprocess.run(
+            ["lsof", "-ti", ":8000"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            for pid in result.stdout.strip().split("\n"):
+                try:
+                    os.kill(int(pid), signal.SIGTERM)
+                except (ProcessLookupError, ValueError):
+                    pass
+            time.sleep(0.5)  # Give process time to exit
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass  # lsof not available or timed out
+
+
 def _ensure_server() -> str | None:
     """Start server if not running. Returns error message or None on success."""
     import requests
 
-    # Check if server is already running
+    # Check if server is already running and responding
     try:
         requests.get("http://localhost:8000/api/status", timeout=2)
         return None  # Already running
     except requests.RequestException:
-        pass  # Not running, start it
+        pass  # Not running or not responding
+
+    # Kill any stale process hogging the port
+    _kill_stale_server()
 
     # Find project root (where pyproject.toml is)
     project_root = Path(__file__).parent.parent.parent
