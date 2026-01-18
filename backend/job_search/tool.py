@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Literal, Optional
@@ -44,11 +45,11 @@ def _ensure_server() -> str | None:
     if not (project_root / "pyproject.toml").exists():
         return "Cannot find project root"
 
-    # Start server in background
+    # Start server in background using current Python (already in poetry virtualenv)
     log_file = Path("/tmp/job-search-server.log")
     with open(log_file, "w") as f:
         subprocess.Popen(
-            ["poetry", "run", "python", "-m", "server.app"],
+            [sys.executable, "-m", "server.app"],
             cwd=project_root,
             stdout=f,
             stderr=subprocess.STDOUT,
