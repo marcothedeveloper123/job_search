@@ -82,6 +82,9 @@ Applications:
 
 Bulk:
   clear-all               Archive all jobs, dives, apps
+
+Research:
+  research <src> <url>    Extract data (glassdoor, crunchbase, g2, linkedin)
 """
 
 
@@ -732,6 +735,28 @@ Example JSON:
 
     elif cmd == "clear-all":
         print(tool.clear_all())
+
+    elif cmd == "research":
+        if len(rest) < 2 or rest[0] in ("-h", "--help", "help"):
+            print("Usage: jbs research <source> <url>")
+            print("  Extract structured data from research sources.")
+            print("  Sources: glassdoor, crunchbase, g2, linkedin")
+            print("")
+            print("Examples:")
+            print('  jbs research glassdoor "https://glassdoor.com/Reviews/Acme-Reviews-E12345.htm"')
+            print('  jbs research crunchbase "https://crunchbase.com/organization/acme"')
+            print('  jbs research g2 "https://g2.com/products/acme/reviews"')
+            print('  jbs research linkedin "https://linkedin.com/company/acme"')
+            return
+        import json as json_mod
+        source, url = rest[0], rest[1]
+        from scripts.research import EXTRACTORS
+        if source not in EXTRACTORS:
+            print(f"Unknown source: {source}")
+            print(f"Available: {', '.join(EXTRACTORS.keys())}")
+            return
+        result = EXTRACTORS[source]().extract(url)
+        print(json_mod.dumps(result, indent=2))
 
     else:
         print(f"Unknown command: {cmd}\n")

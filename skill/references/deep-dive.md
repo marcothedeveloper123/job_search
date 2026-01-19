@@ -114,6 +114,24 @@ Answer each with sourced claims using markdown links.
     - Time zone expectations
     - Office presence requirements
 
+## Research Commands
+
+Use extraction commands instead of manual browsing. These return ~100 tokens of structured JSON instead of 5000+ tokens of page content.
+
+| Source | Command | Returns |
+|--------|---------|---------|
+| Glassdoor | `jbs research glassdoor <url>` | Rating, reviews, pros/cons, CEO approval, interview info |
+| Crunchbase | `jbs research crunchbase <url>` | Funding, stage, investors, employees, HQ |
+| G2 | `jbs research g2 <url>` | Rating, reviews, pros/cons, ranking, alternatives |
+| LinkedIn | `jbs research linkedin <url>` | Employees, HQ, industry, founded, specialties |
+
+If CAPTCHA appears, solve it in the browser window that opens.
+
+**Example output:**
+```json
+{"source": "glassdoor", "rating": 4.2, "reviews": 847, "pros": [...], "cons": [...]}
+```
+
 ## Research Sources
 
 Search broadly. These are starting points, not limits:

@@ -180,6 +180,7 @@ These reference files are bundled inside this skill. Read them from the skill's 
 | `jbs scraper set <n> <k> <v>` | Set config value (dot notation) |
 | `jbs scraper test <n> <query>` | Test search scraper |
 | `jbs scraper test-jd <n> <job_id>` | Test JD scraper |
+| `jbs research <src> <url>` | Extract data (glassdoor, crunchbase, g2, linkedin) |
 
 **Aliases:** `jbs dive list` → `jbs dives`, `jbs app list` → `jbs apps`, `jbs selections` → `jbs sel`
 
