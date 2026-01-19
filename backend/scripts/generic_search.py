@@ -108,7 +108,7 @@ def _build_extraction_js(config: dict) -> str:
         # Extract from URL via regex - escape for JS regex literal
         job_id_regex_escaped = job_id_regex.replace("\\", "\\\\").replace("/", "\\/")
         job_id_extraction = f"""
-        const href = titleEl.getAttribute('href') || '';
+        href = titleEl.getAttribute('href') || '';
         const idMatch = href.match(/{job_id_regex_escaped}/);
         if (!idMatch) return;
         const jobId = idMatch[1];"""
@@ -132,9 +132,12 @@ def _build_extraction_js(config: dict) -> str:
         // Find title link
         const titleEl = card.querySelector('{title}');
         if (!titleEl) return;
+
+        let href;
         {job_id_extraction}
 
-        const href = titleEl.getAttribute('href') || '';
+        // href may already be set by job_id_extraction; ensure it exists
+        if (!href) href = titleEl.getAttribute('href') || '';
         const companyEl = card.querySelector('{company}');
         const locationEl = card.querySelector('{location}');
         const postedEl = card.querySelector('{posted}');
