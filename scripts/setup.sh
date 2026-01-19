@@ -1,83 +1,115 @@
 #!/bin/bash
-set -e
+
+# Job Search Assistant Setup
+# Designed to work on a fresh Mac with minimal user interaction
 
 cd "$(dirname "$0")/.."
+PROJECT_DIR=$(pwd)
 
-echo "=== Job Search Assistant Setup ==="
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+info() { echo -e "${GREEN}==>${NC} $1"; }
+warn() { echo -e "${YELLOW}Warning:${NC} $1"; }
+error() { echo -e "${RED}Error:${NC} $1"; exit 1; }
+
+echo ""
+echo "=========================================="
+echo "  Job Search Assistant Setup"
+echo "=========================================="
 echo ""
 
-# Check for Homebrew
+# --- Homebrew ---
+info "Checking Homebrew..."
 if ! command -v brew &> /dev/null; then
-    echo "Homebrew not found. Installing..."
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    info "Installing Homebrew (you may need to enter your password)..."
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || error "Homebrew installation failed"
 
-    # Add Homebrew to PATH for this session
+    # Add to PATH for this session
     if [[ -f /opt/homebrew/bin/brew ]]; then
         eval "$(/opt/homebrew/bin/brew shellenv)"
     elif [[ -f /usr/local/bin/brew ]]; then
         eval "$(/usr/local/bin/brew shellenv)"
     fi
 fi
+echo "  ✓ Homebrew"
 
-# Install Python 3.12 (required - pydantic-core doesn't support 3.14 yet)
+# --- Python 3.12 (required - pydantic doesn't support 3.14 yet) ---
+info "Checking Python 3.12..."
 if ! brew list python@3.12 &> /dev/null; then
-    echo "Installing Python 3.12..."
-    brew install python@3.12
+    info "Installing Python 3.12..."
+    brew install python@3.12 || error "Failed to install Python 3.12"
 fi
+PYTHON312="$(brew --prefix python@3.12)/bin/python3.12"
+if [[ ! -f "$PYTHON312" ]]; then
+    error "Python 3.12 not found at $PYTHON312"
+fi
+echo "  ✓ Python 3.12"
 
-# Check for Node.js
+# --- Node.js ---
+info "Checking Node.js..."
 if ! command -v node &> /dev/null; then
-    echo "Installing Node.js..."
-    brew install node
+    info "Installing Node.js..."
+    brew install node || error "Failed to install Node.js"
 fi
+echo "  ✓ Node.js $(node --version)"
 
-# Check for Poetry
+# --- Poetry ---
+info "Checking Poetry..."
 if ! command -v poetry &> /dev/null; then
-    echo "Installing Poetry..."
-    brew install poetry
+    info "Installing Poetry..."
+    brew install poetry || error "Failed to install Poetry"
 fi
+echo "  ✓ Poetry"
 
-echo ""
-echo "Installing backend dependencies..."
-# Use Python 3.12 explicitly (Homebrew's poetry defaults to 3.14 which isn't supported)
-poetry env use "$(brew --prefix python@3.12)/bin/python3.12"
-poetry install
+# --- Backend dependencies ---
+info "Installing backend dependencies..."
 
-echo "Building frontend..."
-cd frontend
-npm install
-npm run build
-cd ..
-
-echo "Packaging skill..."
-rm -f skill.skill job-search.skill
-# Use the skill-creator package script if available, otherwise create a simple zip
-if command -v python3 &> /dev/null; then
-    SKILL_PACKAGER="$HOME/.claude/plugins/cache/anthropic-agent-skills/example-skills/"
-    PACKAGER=$(find "$SKILL_PACKAGER" -name "package_skill.py" 2>/dev/null | head -1)
-    if [ -n "$PACKAGER" ]; then
-        python3 "$PACKAGER" skill 2>/dev/null || (cd skill && zip -r ../job-search.skill . -x "*.DS_Store")
-        # Rename if packager created skill.skill
-        [ -f skill.skill ] && mv skill.skill job-search.skill
-    else
-        (cd skill && zip -r ../job-search.skill . -x "*.DS_Store")
+# Clean up any stale virtualenv from failed installs
+if poetry env info -p &> /dev/null; then
+    EXISTING_ENV=$(poetry env info -p 2>/dev/null)
+    EXISTING_PYTHON=$(poetry run python --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -1)
+    if [[ "$EXISTING_PYTHON" != "3.12" ]]; then
+        warn "Removing incompatible virtualenv (Python $EXISTING_PYTHON)"
+        poetry env remove --all 2>/dev/null || true
     fi
-else
-    (cd skill && zip -r ../job-search.skill . -x "*.DS_Store")
 fi
 
-echo "Installing jbs CLI..."
+# Ensure poetry uses Python 3.12
+poetry env use "$PYTHON312" || error "Failed to configure Python 3.12 for poetry"
+poetry install || error "Failed to install Python dependencies"
+echo "  ✓ Backend dependencies"
+
+# --- Playwright browsers ---
+info "Installing Playwright browser..."
+poetry run playwright install chromium || error "Failed to install Playwright browser"
+echo "  ✓ Playwright browser"
+
+# --- Frontend ---
+info "Building frontend..."
+cd frontend
+npm install || error "Failed to install frontend dependencies"
+npm run build || error "Failed to build frontend"
+cd ..
+echo "  ✓ Frontend"
+
+# --- Skill package ---
+info "Packaging skill..."
+rm -f skill.skill job-search.skill
+(cd skill && zip -rq ../job-search.skill . -x "*.DS_Store") || error "Failed to package skill"
+echo "  ✓ Skill package"
+
+# --- CLI command ---
+info "Installing jbs CLI..."
 mkdir -p ~/bin
 
-# Get absolute path to poetry (works across different install methods)
 POETRY_PATH=$(which poetry)
-if [ -z "$POETRY_PATH" ]; then
-    echo "Error: poetry not found in PATH"
-    exit 1
+if [[ -z "$POETRY_PATH" ]]; then
+    error "Poetry not found in PATH"
 fi
-
-# Get absolute path to project directory
-PROJECT_DIR=$(pwd)
 
 cat > ~/bin/jbs << SCRIPT
 #!/bin/bash
@@ -85,22 +117,30 @@ cd "$PROJECT_DIR" && "$POETRY_PATH" run python -m job_search.cli "\$@"
 SCRIPT
 chmod +x ~/bin/jbs
 
+# Add ~/bin to PATH if not already there
 if ! echo "$PATH" | grep -q "$HOME/bin"; then
+    # Create shell config files if they don't exist
+    touch ~/.zshrc ~/.zshenv ~/.bash_profile 2>/dev/null || true
+
     echo 'export PATH="$HOME/bin:$PATH"' >> ~/.zshrc
     echo 'export PATH="$HOME/bin:$PATH"' >> ~/.zshenv
     echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bash_profile
-    echo "Added ~/bin to PATH in ~/.zshrc, ~/.zshenv, and ~/.bash_profile"
 fi
+echo "  ✓ CLI command (jbs)"
 
+# --- Claude Desktop ---
 echo ""
-echo "=== Claude Desktop MCP Setup ==="
+info "Configuring Claude Desktop..."
+
 CLAUDE_CONFIG="$HOME/Library/Application Support/Claude/claude_desktop_config.json"
 
-if [ ! -f "$CLAUDE_CONFIG" ]; then
-    echo "Claude Desktop config not found. Install Claude Desktop first."
+if [[ ! -f "$CLAUDE_CONFIG" ]]; then
+    warn "Claude Desktop config not found."
+    echo "  Install Claude Desktop from: https://claude.ai/download"
+    echo "  Then run this script again."
 else
-    # Check what's missing using Python
-    MISSING=$(python3 << 'PYEOF'
+    # Check for required MCPs using Python 3.12 (not system python3 which might be 3.14)
+    MISSING=$("$PYTHON312" << 'PYEOF'
 import json, os
 config_path = os.path.expanduser("~/Library/Application Support/Claude/claude_desktop_config.json")
 try:
@@ -112,23 +152,22 @@ try:
     if "playwright" not in servers:
         missing.append("playwright")
     print(" ".join(missing))
-except: print("desktop-commander playwright")
+except:
+    print("desktop-commander playwright")
 PYEOF
 )
 
-    if [ -z "$MISSING" ]; then
-        echo "✓ All required MCPs already configured"
+    if [[ -z "$MISSING" ]]; then
+        echo "  ✓ MCP servers configured"
     else
         if [[ "$MISSING" == *"desktop-commander"* ]]; then
-            read -p "Install Desktop Commander MCP? [y/N] " -n 1 -r; echo
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                npx @wonderwhy-er/desktop-commander@latest setup
-            fi
+            info "Installing Desktop Commander MCP..."
+            npx -y @wonderwhy-er/desktop-commander@latest setup || warn "Desktop Commander setup failed - you may need to configure it manually"
         fi
 
         if [[ "$MISSING" == *"playwright"* ]]; then
-            echo "Installing Playwright MCP..."
-            python3 << 'PYEOF'
+            info "Adding Playwright MCP..."
+            "$PYTHON312" << 'PYEOF'
 import json, os
 config_path = os.path.expanduser("~/Library/Application Support/Claude/claude_desktop_config.json")
 with open(config_path) as f:
@@ -139,58 +178,47 @@ config.setdefault("mcpServers", {})["playwright"] = {
 }
 with open(config_path, "w") as f:
     json.dump(config, f, indent=2)
-print("✓ Added Playwright MCP")
 PYEOF
+            echo "  ✓ Playwright MCP added"
         fi
-        echo ""
-        echo "Restart Claude Desktop to apply MCP changes."
     fi
 fi
 
-echo ""
-echo "Installing skill..."
+# --- Skill installation ---
+info "Installing skill to Claude Desktop..."
 
-# Find Claude Desktop skills directory
 SKILLS_MANIFEST=$(find "$HOME/Library/Application Support/Claude/local-agent-mode-sessions/skills-plugin" -name "manifest.json" 2>/dev/null | head -1)
 
-if [ -n "$SKILLS_MANIFEST" ]; then
+if [[ -n "$SKILLS_MANIFEST" ]]; then
     SKILLS_DIR=$(dirname "$SKILLS_MANIFEST")/skills
 
-    # Unzip skill to skills directory
     rm -rf "$SKILLS_DIR/job-search"
-    unzip -q job-search.skill -d "$SKILLS_DIR/job-search"
+    unzip -q job-search.skill -d "$SKILLS_DIR/job-search" || error "Failed to extract skill"
 
-    # Update manifest.json
-    python3 << PYEOF
-import json
+    "$PYTHON312" << PYEOF
+import json, re
 from datetime import datetime
 
 manifest_path = "$SKILLS_MANIFEST"
 with open(manifest_path) as f:
     manifest = json.load(f)
 
-# Read skill metadata from SKILL.md frontmatter
 skill_md_path = "$SKILLS_DIR/job-search/SKILL.md"
 with open(skill_md_path) as f:
     content = f.read()
 
-# Parse YAML frontmatter
-import re
 frontmatter_match = re.search(r'^---\s*\n(.*?)\n---', content, re.DOTALL)
 if frontmatter_match:
     fm = frontmatter_match.group(1)
-    name_match = re.search(r'^name:\s*["\']?(.+?)["\']?\s*$', fm, re.MULTILINE)
-    desc_match = re.search(r'^description:\s*["\']?(.+?)["\']?\s*$', fm, re.MULTILINE)
+    name_match = re.search(r'^name:\s*["\']?(.+?)["\']?\s*\$', fm, re.MULTILINE)
+    desc_match = re.search(r'^description:\s*["\']?(.+?)["\']?\s*\$', fm, re.MULTILINE)
     name = name_match.group(1) if name_match else "job-search"
     description = desc_match.group(1) if desc_match else ""
 else:
     name = "job-search"
     description = ""
 
-# Remove existing entry if present
 manifest["skills"] = [s for s in manifest["skills"] if s.get("name") != "job-search"]
-
-# Add new entry
 manifest["skills"].insert(0, {
     "skillId": "skill_jobsearch_user",
     "name": name,
@@ -199,26 +227,30 @@ manifest["skills"].insert(0, {
     "updatedAt": datetime.utcnow().isoformat() + "Z",
     "enabled": True
 })
-
 manifest["lastUpdated"] = int(datetime.utcnow().timestamp() * 1000)
 
 with open(manifest_path, "w") as f:
     json.dump(manifest, f, indent=2)
-print("✓ Skill installed")
 PYEOF
+    echo "  ✓ Skill installed"
 else
-    echo "Claude Desktop skills folder not found."
-    echo "Install skill manually: drag job-search.skill into Claude Desktop settings."
+    warn "Claude Desktop skills folder not found."
+    echo "  You may need to open Claude Desktop once first, then run this script again."
+    echo "  Or install manually: drag job-search.skill into Claude Desktop settings."
 fi
 
+# --- Done ---
 echo ""
 echo "=========================================="
-echo "  Setup Complete!"
+echo -e "  ${GREEN}Setup Complete!${NC}"
 echo "=========================================="
 echo ""
 echo "NEXT STEPS:"
 echo ""
-echo "1. RESTART YOUR TERMINAL (or run: source ~/.zshrc)"
-echo "2. RESTART CLAUDE DESKTOP"
-echo "3. TELL CLAUDE: \"search for jobs\""
+echo "  1. RESTART YOUR TERMINAL"
+echo "     (or run: source ~/.zshrc)"
+echo ""
+echo "  2. RESTART CLAUDE DESKTOP"
+echo ""
+echo "  3. TELL CLAUDE: \"search for jobs\""
 echo ""
