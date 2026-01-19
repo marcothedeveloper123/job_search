@@ -110,8 +110,8 @@ def build_extraction_js(config: Optional[dict], default_js: str) -> str:
 
     url_pattern = config.get("url_pattern", {})
     job_id_regex = url_pattern.get("job_id_regex", "/jobs/(\\d+)")
-    # Escape for JS regex literal: backslashes and forward slashes
-    job_id_regex_escaped = job_id_regex.replace("\\", "\\\\").replace("/", "\\/")
+    # Escape forward slashes for JS regex literal (backslashes are already correct)
+    job_id_regex_escaped = job_id_regex.replace("/", "\\/")
 
     return f"""
 () => {{
