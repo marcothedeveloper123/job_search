@@ -19,9 +19,9 @@ if ! command -v brew &> /dev/null; then
     fi
 fi
 
-# Check for Python 3.11+
-if ! command -v python3 &> /dev/null; then
-    echo "Installing Python..."
+# Install Python 3.12 (required - pydantic-core doesn't support 3.14 yet)
+if ! brew list python@3.12 &> /dev/null; then
+    echo "Installing Python 3.12..."
     brew install python@3.12
 fi
 
@@ -39,6 +39,8 @@ fi
 
 echo ""
 echo "Installing backend dependencies..."
+# Use Python 3.12 explicitly (Homebrew's poetry defaults to 3.14 which isn't supported)
+poetry env use "$(brew --prefix python@3.12)/bin/python3.12"
 poetry install
 
 echo "Building frontend..."
