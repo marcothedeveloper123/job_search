@@ -1,10 +1,138 @@
 """Glassdoor company reviews extractor."""
 
+import json
 import re
 
 from playwright.sync_api import Page
 
 from scripts.research.base import BaseExtractor
+
+# JavaScript extraction that runs in page context - more reliable than CSS selectors
+EXTRACTION_JS = """
+() => {
+    const result = {};
+    const text = document.body.innerText || '';
+
+    // Try JSON-LD structured data first
+    const jsonLd = document.querySelectorAll('script[type="application/ld+json"]');
+    for (const script of jsonLd) {
+        try {
+            const data = JSON.parse(script.textContent);
+            if (data['@type'] === 'Organization' || data['@type'] === 'EmployerAggregateRating') {
+                if (data.aggregateRating) {
+                    result.rating = parseFloat(data.aggregateRating.ratingValue);
+                    result.reviews = parseInt(data.aggregateRating.reviewCount);
+                }
+                if (data.ratingValue) result.rating = parseFloat(data.ratingValue);
+                if (data.reviewCount) result.reviews = parseInt(data.reviewCount);
+            }
+        } catch (e) {}
+    }
+
+    // Rating: look for "X.X ★" pattern or "X.X out of 5"
+    if (!result.rating) {
+        const ratingMatch = text.match(/(\\d\\.\\d)\\s*★/) ||
+                           text.match(/(\\d\\.\\d)\\s*out of 5/i) ||
+                           text.match(/rate[sd]?.*?(\\d\\.\\d)\\s*out of 5/i);
+        if (ratingMatch) {
+            result.rating = parseFloat(ratingMatch[1]);
+        }
+    }
+
+    // Review count: "based on X reviews" or "X reviews"
+    if (!result.reviews) {
+        const reviewMatch = text.match(/based on (\\d+).*?reviews/i) ||
+                           text.match(/(\\d+)\\s+anonymous reviews/i) ||
+                           text.match(/(\\d+)\\s+reviews/i);
+        if (reviewMatch) {
+            result.reviews = parseInt(reviewMatch[1]);
+        }
+    }
+
+    // Recommend percentage: "X% would recommend"
+    const recommendMatch = text.match(/(\\d+)%\\s*would recommend/i);
+    if (recommendMatch) {
+        result.recommend_pct = recommendMatch[1] + '%';
+    }
+
+    // Business outlook: "X% positive business outlook"
+    const outlookMatch = text.match(/(\\d+)%.*?positive business outlook/i);
+    if (outlookMatch) {
+        result.business_outlook = outlookMatch[1] + '%';
+    }
+
+    // CEO approval
+    const ceoMatch = text.match(/(\\d+)%\\s*(?:approve|approval).*?CEO/i) ||
+                    text.match(/CEO.*?(\\d+)%/i);
+    if (ceoMatch) {
+        result.ceo_approval = ceoMatch[1] + '%';
+    }
+
+    // Interview info from FAQs section
+    const difficultyMatch = text.match(/difficulty.*?(\\d\\.\\d)\\s*out of 5/i) ||
+                           text.match(/(\\d\\.\\d)\\s*out of 5.*?difficulty/i);
+    const positiveInterviewMatch = text.match(/(\\d+)%.*?rate their.*?interview.*?positive/i) ||
+                                   text.match(/(\\d+)%.*?positive.*?interview/i);
+
+    if (difficultyMatch || positiveInterviewMatch) {
+        result.interview = {};
+        if (difficultyMatch) {
+            result.interview.difficulty = parseFloat(difficultyMatch[1]);
+        }
+        if (positiveInterviewMatch) {
+            result.interview.positive_pct = positiveInterviewMatch[1] + '%';
+        }
+    }
+
+    // Ratings breakdown - look for category ratings
+    const categories = {
+        'Culture': 'culture',
+        'Work/Life Balance': 'work_life_balance',
+        'Diversity': 'diversity',
+        'Compensation': 'compensation',
+        'Career Opportunities': 'career_opportunities',
+        'Senior Management': 'senior_management'
+    };
+
+    const breakdown = {};
+    for (const [label, key] of Object.entries(categories)) {
+        const pattern = new RegExp(label + '[:\\\\s]*(\\\\d\\\\.\\\\d)', 'i');
+        const match = text.match(pattern);
+        if (match) {
+            breakdown[key] = parseFloat(match[1]);
+        }
+    }
+    if (Object.keys(breakdown).length > 0) {
+        result.ratings_breakdown = breakdown;
+    }
+
+    // Extract pros and cons from reviews page (if present)
+    const pros = [];
+    const cons = [];
+
+    const prosMatches = text.match(/Pros[:\\n]+([^\\n]{20,300})/g) || [];
+    const consMatches = text.match(/Cons[:\\n]+([^\\n]{20,300})/g) || [];
+
+    for (const match of prosMatches.slice(0, 5)) {
+        const content = match.replace(/^Pros[:\\n]+/, '').trim();
+        if (content.length > 15) {
+            pros.push(content.length > 200 ? content.slice(0, 200) + '...' : content);
+        }
+    }
+
+    for (const match of consMatches.slice(0, 5)) {
+        const content = match.replace(/^Cons[:\\n]+/, '').trim();
+        if (content.length > 15) {
+            cons.push(content.length > 200 ? content.slice(0, 200) + '...' : content);
+        }
+    }
+
+    if (pros.length > 0) result.pros = pros;
+    if (cons.length > 0) result.cons = cons;
+
+    return result;
+}
+"""
 
 
 class GlassdoorExtractor(BaseExtractor):
@@ -19,186 +147,43 @@ class GlassdoorExtractor(BaseExtractor):
             "url": page.url,
         }
 
-        # Overall rating (e.g., "4.2")
-        rating = self._extract_rating(page)
-        if rating:
-            result["rating"] = rating
+        # Run JavaScript extraction in page context
+        try:
+            extracted = page.evaluate(EXTRACTION_JS)
+            if extracted:
+                result.update(extracted)
+        except Exception:
+            pass
 
-        # Total review count
-        review_count = self._extract_review_count(page)
-        if review_count:
-            result["reviews"] = review_count
-
-        # Ratings breakdown (culture, compensation, etc.)
-        breakdown = self._extract_ratings_breakdown(page)
-        if breakdown:
-            result["ratings_breakdown"] = breakdown
-
-        # CEO approval
-        ceo = self._extract_ceo_approval(page)
-        if ceo:
-            result["ceo_approval"] = ceo
-
-        # Recommend to friend percentage
-        recommend = self._extract_recommend(page)
-        if recommend:
-            result["recommend_pct"] = recommend
-
-        # Top pros and cons from reviews
-        pros, cons = self._extract_pros_cons(page)
-        if pros:
-            result["pros"] = pros
-        if cons:
-            result["cons"] = cons
-
-        # Interview difficulty
-        interview = self._extract_interview_info(page)
-        if interview:
-            result["interview"] = interview
+        # Fallback: try regex on full page content
+        if "rating" not in result:
+            content = page.content()
+            self._extract_from_html(content, result)
 
         return result
 
-    def _extract_rating(self, page: Page) -> float | None:
-        """Extract overall rating."""
-        # Try various selectors Glassdoor uses
-        selectors = [
-            '[data-test="rating-info"] span',
-            '.rating-headline .rating-num',
-            '.v2__EIReviewsRatingsStylesV2__ratingNum',
-            '[class*="ratingNum"]',
+    def _extract_from_html(self, content: str, result: dict):
+        """Fallback extraction from raw HTML."""
+        # Rating from meta tags or data attributes
+        rating_patterns = [
+            r'ratingValue["\s:]+(\d\.\d)',
+            r'data-rating="(\d\.\d)"',
+            r'"overallRating":\s*(\d\.\d)',
         ]
-        for sel in selectors:
-            text = self._safe_text(page, sel)
-            if text:
-                try:
-                    return float(text)
-                except ValueError:
-                    continue
-        return None
+        for pattern in rating_patterns:
+            match = re.search(pattern, content)
+            if match:
+                result["rating"] = float(match.group(1))
+                break
 
-    def _extract_review_count(self, page: Page) -> int | None:
-        """Extract total review count."""
-        # Look for "X reviews" pattern
-        selectors = [
-            '[data-test="rating-info"]',
-            '.rating-headline',
-            '[class*="reviewCount"]',
+        # Review count
+        review_patterns = [
+            r'reviewCount["\s:]+(\d+)',
+            r'"numberOfReviews":\s*(\d+)',
+            r'(\d+)\s*Reviews',
         ]
-        for sel in selectors:
-            text = self._safe_text(page, sel)
-            if text:
-                match = re.search(r'([\d,]+)\s*reviews?', text, re.I)
-                if match:
-                    return int(match.group(1).replace(',', ''))
-        return None
-
-    def _extract_ratings_breakdown(self, page: Page) -> dict | None:
-        """Extract breakdown ratings (culture, compensation, etc.)."""
-        breakdown = {}
-
-        # Look for specific rating categories
-        categories = [
-            ("culture", "Culture"),
-            ("work_life_balance", "Work/Life Balance"),
-            ("diversity", "Diversity"),
-            ("compensation", "Compensation"),
-            ("senior_management", "Senior Management"),
-            ("career_opportunities", "Career Opportunities"),
-        ]
-
-        for key, label in categories:
-            # Look for rating near the label text
-            els = page.query_selector_all(f'//*[contains(text(), "{label}")]')
-            for el in els:
-                parent = el.evaluate_handle('el => el.closest("[class*=rating]") || el.parentElement')
-                if parent:
-                    text = parent.evaluate('el => el.textContent')
-                    match = re.search(r'(\d\.?\d?)', text)
-                    if match:
-                        try:
-                            breakdown[key] = float(match.group(1))
-                        except ValueError:
-                            pass
-
-        return breakdown if breakdown else None
-
-    def _extract_ceo_approval(self, page: Page) -> str | None:
-        """Extract CEO approval rating."""
-        # Look for "X% approve of CEO"
-        selectors = [
-            '[class*="ceo"] [class*="approval"]',
-            '[data-test*="ceo"]',
-        ]
-        for sel in selectors:
-            text = self._safe_text(page, sel)
-            if text:
-                match = re.search(r'(\d+)%', text)
-                if match:
-                    return f"{match.group(1)}%"
-
-        # Try page-wide search
-        content = page.content()
-        match = re.search(r'(\d+)%\s*(?:approve|approval).{0,20}CEO', content, re.I)
-        if match:
-            return f"{match.group(1)}%"
-
-        return None
-
-    def _extract_recommend(self, page: Page) -> str | None:
-        """Extract recommend to friend percentage."""
-        content = page.content()
-        match = re.search(r'(\d+)%\s*(?:would )?recommend', content, re.I)
-        if match:
-            return f"{match.group(1)}%"
-        return None
-
-    def _extract_pros_cons(self, page: Page) -> tuple[list[str], list[str]]:
-        """Extract top pros and cons from reviews."""
-        pros = []
-        cons = []
-
-        # Glassdoor review structure: each review has pros/cons sections
-        reviews = page.query_selector_all('[class*="review"], [data-test*="review"]')[:5]
-
-        for review in reviews:
-            # Look for pros section
-            pro_el = review.query_selector('[data-test="pros"], [class*="pros"]')
-            if pro_el:
-                text = pro_el.inner_text().strip()
-                if text and len(text) > 10:
-                    # Truncate long pros
-                    pros.append(text[:200] + "..." if len(text) > 200 else text)
-
-            # Look for cons section
-            con_el = review.query_selector('[data-test="cons"], [class*="cons"]')
-            if con_el:
-                text = con_el.inner_text().strip()
-                if text and len(text) > 10:
-                    cons.append(text[:200] + "..." if len(text) > 200 else text)
-
-        return pros[:5], cons[:5]
-
-    def _extract_interview_info(self, page: Page) -> dict | None:
-        """Extract interview difficulty and experience info."""
-        result = {}
-
-        # Interview difficulty (1-5 scale)
-        difficulty_selectors = [
-            '[class*="interviewDifficulty"]',
-            '[data-test*="difficulty"]',
-        ]
-        for sel in difficulty_selectors:
-            text = self._safe_text(page, sel)
-            if text:
-                match = re.search(r'(\d\.?\d?)', text)
-                if match:
-                    result["difficulty"] = float(match.group(1))
-                    break
-
-        # Experience breakdown (positive/neutral/negative)
-        content = page.content()
-        exp_match = re.search(r'(\d+)%\s*positive', content, re.I)
-        if exp_match:
-            result["positive_experience_pct"] = f"{exp_match.group(1)}%"
-
-        return result if result else None
+        for pattern in review_patterns:
+            match = re.search(pattern, content)
+            if match:
+                result["reviews"] = int(match.group(1))
+                break

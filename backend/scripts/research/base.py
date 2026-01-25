@@ -57,18 +57,27 @@ class BaseExtractor(ABC):
 
     def _is_cloudflare(self, page: Page) -> bool:
         """Check if page shows Cloudflare challenge."""
-        title = page.title().lower()
-        if "just a moment" in title or "cloudflare" in title:
-            return True
-        # Check for challenge elements
-        content = page.content().lower()
-        return "cf-challenge" in content or "checking your browser" in content
+        try:
+            title = page.title().lower()
+            if "just a moment" in title or "cloudflare" in title:
+                return True
+            # Check for challenge elements
+            content = page.content().lower()
+            return "cf-challenge" in content or "checking your browser" in content
+        except Exception:
+            # Page navigated or context destroyed - likely CAPTCHA was solved
+            return False
 
     def _wait_for_cloudflare(self, page: Page, timeout: int = 120):
         """Wait for user to solve Cloudflare challenge."""
         for _ in range(timeout):
-            if not self._is_cloudflare(page):
-                time.sleep(1)  # Extra settle time
+            try:
+                if not self._is_cloudflare(page):
+                    time.sleep(1)  # Extra settle time
+                    return
+            except Exception:
+                # Page navigated - CAPTCHA likely solved
+                time.sleep(1)
                 return
             time.sleep(1)
         print("Cloudflare timeout. Attempting extraction anyway...", file=sys.stderr)

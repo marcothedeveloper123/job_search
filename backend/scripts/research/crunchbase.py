@@ -6,6 +6,122 @@ from playwright.sync_api import Page
 
 from scripts.research.base import BaseExtractor
 
+# JavaScript extraction for Crunchbase
+EXTRACTION_JS = """
+() => {
+    const result = {};
+    const text = document.body.innerText || '';
+
+    // Try JSON-LD structured data first
+    const jsonLd = document.querySelectorAll('script[type="application/ld+json"]');
+    for (const script of jsonLd) {
+        try {
+            const data = JSON.parse(script.textContent);
+            if (data['@type'] === 'Organization') {
+                if (data.name) result.name = data.name;
+                if (data.description) result.description = data.description.slice(0, 500);
+                if (data.foundingDate) result.founded = data.foundingDate;
+                if (data.numberOfEmployees) {
+                    result.employees = data.numberOfEmployees.value || data.numberOfEmployees;
+                }
+            }
+        } catch (e) {}
+    }
+
+    // Extract funding info from visible text
+    // Total funding
+    const fundingPatterns = [
+        /Total\\s+Funding[:\\s]*\\$?([\\d.,]+[BMK]?)/i,
+        /(?:has\\s+)?raised[:\\s]*\\$?([\\d.,]+[BMK]?)/i,
+        /\\$([\\d.,]+[BMK]?)\\s*(?:total\\s+)?(?:raised|funding)/i,
+    ];
+    for (const pattern of fundingPatterns) {
+        const match = text.match(pattern);
+        if (match) {
+            result.funding_total = '$' + match[1].toUpperCase();
+            break;
+        }
+    }
+
+    // Funding stage
+    const stageMatch = text.match(/(Series\\s+[A-Z]|Seed|Pre-Seed|IPO|Private\\s+Equity|Grant)/i);
+    if (stageMatch) {
+        result.funding_stage = stageMatch[1];
+    }
+
+    // Last round
+    const lastRoundMatch = text.match(/(?:Latest|Last|Most\\s+Recent)\\s+(?:Funding|Round)[^$]*\\$([\\d.,]+[BMK]?)/i);
+    if (lastRoundMatch) {
+        result.last_round = '$' + lastRoundMatch[1].toUpperCase();
+    }
+
+    // Employee count
+    if (!result.employees) {
+        const empPatterns = [
+            /([\\d,]+(?:-[\\d,]+)?)\\s*employees?/i,
+            /Employees?[:\\s]*([\\d,]+(?:-[\\d,]+)?)/i,
+            /Company\\s+Size[:\\s]*([\\d,]+(?:-[\\d,]+)?)/i,
+        ];
+        for (const pattern of empPatterns) {
+            const match = text.match(pattern);
+            if (match) {
+                result.employees = match[1];
+                break;
+            }
+        }
+    }
+
+    // Founded year
+    if (!result.founded) {
+        const foundedMatch = text.match(/Founded[:\\s]*(\\d{4})/i);
+        if (foundedMatch) {
+            result.founded = foundedMatch[1];
+        }
+    }
+
+    // Headquarters
+    const hqPatterns = [
+        /Headquarters?[:\\s]*([^\\n,]{3,50})/i,
+        /(?:Based|Located)\\s+in[:\\s]*([^\\n,]{3,50})/i,
+        /HQ[:\\s]*([^\\n,]{3,50})/i,
+    ];
+    for (const pattern of hqPatterns) {
+        const match = text.match(pattern);
+        if (match) {
+            const hq = match[1].trim();
+            if (hq.length < 100 && !hq.includes('http')) {
+                result.hq = hq;
+                break;
+            }
+        }
+    }
+
+    // Description (if not from JSON-LD)
+    if (!result.description) {
+        // Look for "About" section content
+        const aboutMatch = text.match(/About[\\n\\s]+([^\\n]{50,500})/);
+        if (aboutMatch) {
+            result.description = aboutMatch[1].trim();
+        }
+    }
+
+    // Investors - look for investor names
+    const investorSection = text.match(/(?:Investors?|Lead\\s+Investors?|Key\\s+Investors?)[:\\n\\s]+([^\\n]{20,500})/i);
+    if (investorSection) {
+        const investors = investorSection[1]
+            .split(/[,\\n]/)
+            .map(s => s.trim())
+            .filter(s => s.length > 2 && s.length < 50)
+            .slice(0, 5);
+        if (investors.length > 0) {
+            result.investors = investors;
+        }
+    }
+
+    return result;
+}
+"""
+
 
 class CrunchbaseExtractor(BaseExtractor):
     """Extract company funding and profile data from Crunchbase."""
@@ -19,170 +135,51 @@ class CrunchbaseExtractor(BaseExtractor):
             "url": page.url,
         }
 
-        # Company description
-        desc = self._extract_description(page)
-        if desc:
-            result["description"] = desc
+        # Run JavaScript extraction in page context
+        try:
+            extracted = page.evaluate(EXTRACTION_JS)
+            if extracted:
+                result.update(extracted)
+        except Exception:
+            pass
 
-        # Funding information
-        funding = self._extract_funding(page)
-        result.update(funding)
-
-        # Key investors
-        investors = self._extract_investors(page)
-        if investors:
-            result["investors"] = investors
-
-        # Company details
-        details = self._extract_details(page)
-        result.update(details)
+        # Fallback: try regex on full page content
+        if "funding_total" not in result and "employees" not in result:
+            content = page.content()
+            self._extract_from_html(content, result)
 
         return result
 
-    def _extract_description(self, page: Page) -> str | None:
-        """Extract company description."""
-        selectors = [
-            '[class*="description"]',
-            '[data-test*="description"]',
-            '.profile-section [class*="text"]',
-        ]
-        for sel in selectors:
-            text = self._safe_text(page, sel)
-            if text and len(text) > 20:
-                # Truncate to reasonable length
-                return text[:500] + "..." if len(text) > 500 else text
-        return None
-
-    def _extract_funding(self, page: Page) -> dict:
-        """Extract funding information."""
-        result = {}
-
-        # Total funding
-        content = page.content()
-
-        # Look for "Total Funding" or similar
+    def _extract_from_html(self, content: str, result: dict):
+        """Fallback extraction from raw HTML."""
+        # Funding from data attributes or JSON
         funding_patterns = [
-            r'Total Funding[:\s]*\$?([\d.,]+[BMK]?)',
-            r'raised[:\s]*\$?([\d.,]+[BMK]?)',
-            r'\$?([\d.,]+[BMK]?)\s*(?:total )?(?:raised|funding)',
+            r'"totalFundingAmount":\s*"?\$?([\\d.,]+[BMK]?)"?',
+            r'"fundingTotal":\s*"?\$?([\\d.,]+[BMK]?)"?',
+            r'data-funding="([\\d.,]+)"',
         ]
         for pattern in funding_patterns:
-            match = re.search(pattern, content, re.I)
+            match = re.search(pattern, content)
             if match:
                 result["funding_total"] = self._normalize_amount(match.group(1))
                 break
 
-        # Last funding round
-        round_patterns = [
-            r'(Series [A-Z]|Seed|Pre-Seed|IPO|Private Equity)',
-            r'Latest Funding[:\s]*(Series [A-Z]|Seed)',
-        ]
-        for pattern in round_patterns:
-            match = re.search(pattern, content)
-            if match:
-                result["funding_stage"] = match.group(1)
-                break
-
-        # Last round amount
-        last_round_patterns = [
-            r'(?:Latest|Last|Most Recent)[^$]*\$?([\d.,]+[BMK]?)',
-        ]
-        for pattern in last_round_patterns:
-            match = re.search(pattern, content, re.I)
-            if match:
-                result["last_round"] = self._normalize_amount(match.group(1))
-                break
-
-        return result
-
-    def _extract_investors(self, page: Page) -> list[str] | None:
-        """Extract key investors."""
-        investors = []
-
-        # Look for investor links/names
-        selectors = [
-            '[class*="investor"] a',
-            '[data-test*="investor"]',
-            'a[href*="/organization/"][href*="investor"]',
-        ]
-
-        for sel in selectors:
-            names = self._safe_all_text(page, sel, limit=5)
-            investors.extend(names)
-
-        # Dedupe and clean
-        seen = set()
-        clean = []
-        for inv in investors:
-            inv = inv.strip()
-            if inv and inv.lower() not in seen and len(inv) > 2:
-                seen.add(inv.lower())
-                clean.append(inv)
-
-        return clean[:5] if clean else None
-
-    def _extract_details(self, page: Page) -> dict:
-        """Extract company details (employees, founded, HQ, etc.)."""
-        result = {}
-        content = page.content()
-
-        # Employee count
+        # Employee count from meta/data
         emp_patterns = [
-            r'Employees?[:\s]*([\d,]+(?:-[\d,]+)?)',
-            r'([\d,]+(?:-[\d,]+)?)\s*employees?',
-            r'([\d,]+-[\d,]+)\s*(?:total )?employees?',
+            r'"numberOfEmployees":\s*"?([\\d,]+(?:-[\\d,]+)?)"?',
+            r'data-employees="([\\d,]+)"',
         ]
         for pattern in emp_patterns:
-            match = re.search(pattern, content, re.I)
+            match = re.search(pattern, content)
             if match:
                 result["employees"] = match.group(1)
                 break
 
-        # Founded year
-        founded_patterns = [
-            r'Founded[:\s]*(\d{4})',
-            r'Founded in (\d{4})',
-        ]
-        for pattern in founded_patterns:
-            match = re.search(pattern, content, re.I)
-            if match:
-                result["founded"] = match.group(1)
-                break
-
-        # Headquarters
-        hq_patterns = [
-            r'Headquarters?[:\s]*([^,\n]+)',
-            r'HQ[:\s]*([^,\n]+)',
-            r'Based in[:\s]*([^,\n]+)',
-        ]
-        for pattern in hq_patterns:
-            match = re.search(pattern, content, re.I)
-            if match:
-                hq = match.group(1).strip()
-                if len(hq) < 100:  # Sanity check
-                    result["hq"] = hq
-                break
-
-        # Website
-        website_selectors = [
-            'a[href*="www."][class*="link"]',
-            'a[data-test*="website"]',
-        ]
-        for sel in website_selectors:
-            href = self._safe_attr(page, sel, "href")
-            if href and "crunchbase" not in href:
-                result["website"] = href
-                break
-
-        return result
-
     def _normalize_amount(self, amount: str) -> str:
         """Normalize funding amount to readable format."""
         amount = amount.strip().upper()
-        # Already has B/M/K suffix
         if amount[-1] in "BMK":
             return "$" + amount
-        # Try to parse and format
         try:
             num = float(amount.replace(",", ""))
             if num >= 1_000_000_000:

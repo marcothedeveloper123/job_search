@@ -12,6 +12,84 @@ from scripts.research.base import BaseExtractor
 # Use LinkedIn's persistent profile (same as job scraper)
 LINKEDIN_PROFILE_DIR = Path(__file__).parent.parent.parent.parent / "data" / "linkedin_profile"
 
+# JavaScript extraction for LinkedIn company pages
+EXTRACTION_JS = """
+() => {
+    const result = {};
+    const text = document.body.innerText || '';
+
+    // Company name from h1
+    const h1 = document.querySelector('h1');
+    if (h1) {
+        result.name = h1.innerText.trim();
+    }
+
+    // Look for "About" section data - LinkedIn uses dt/dd pairs
+    const dts = document.querySelectorAll('dt');
+    for (const dt of dts) {
+        const label = dt.innerText.trim().toLowerCase();
+        const dd = dt.nextElementSibling;
+        if (!dd || dd.tagName !== 'DD') continue;
+        const value = dd.innerText.trim();
+
+        if (label.includes('website')) {
+            const link = dd.querySelector('a');
+            if (link) result.website = link.href;
+        } else if (label.includes('industry')) {
+            result.industry = value;
+        } else if (label.includes('company size') || label.includes('employees')) {
+            // Extract employee count - look for patterns like "501-1,000" or "1,001-5,000"
+            const empMatch = value.match(/([\\d,]+(?:-[\\d,]+)?)/);
+            if (empMatch) result.employees = empMatch[1];
+        } else if (label.includes('headquarters')) {
+            result.hq = value;
+        } else if (label.includes('founded')) {
+            const yearMatch = value.match(/(\\d{4})/);
+            if (yearMatch) result.founded = yearMatch[1];
+        } else if (label.includes('type')) {
+            result.type = value;
+        } else if (label.includes('specialties')) {
+            result.specialties = value.split(',').map(s => s.trim()).filter(s => s);
+        }
+    }
+
+    // Fallback: extract from page text if dt/dd didn't work
+    if (!result.employees) {
+        // Look for "X employees on LinkedIn" or "X,XXX employees"
+        const empMatch = text.match(/([\\d,]+(?:-[\\d,]+)?)\\s+employees\\s+on\\s+LinkedIn/i) ||
+                        text.match(/Company size\\s*([\\d,]+(?:-[\\d,]+)?)/i);
+        if (empMatch) result.employees = empMatch[1];
+    }
+
+    if (!result.hq) {
+        const hqMatch = text.match(/Headquarters?\\s*([^\\n]{5,50})/i);
+        if (hqMatch) result.hq = hqMatch[1].trim();
+    }
+
+    if (!result.industry) {
+        const indMatch = text.match(/Industry\\s*([^\\n]{5,50})/i);
+        if (indMatch) result.industry = indMatch[1].trim();
+    }
+
+    if (!result.founded) {
+        const foundedMatch = text.match(/Founded\\s*(\\d{4})/i);
+        if (foundedMatch) result.founded = foundedMatch[1];
+    }
+
+    // Description - look for "Overview" or "About" section
+    const descEl = document.querySelector('[class*="description"]') ||
+                   document.querySelector('[class*="about-us"]');
+    if (descEl) {
+        const desc = descEl.innerText.trim();
+        if (desc.length > 50) {
+            result.description = desc.length > 500 ? desc.slice(0, 500) + '...' : desc;
+        }
+    }
+
+    return result;
+}
+"""
+
 
 class LinkedInExtractor(BaseExtractor):
     """Extract company data from LinkedIn company pages."""
@@ -71,216 +149,49 @@ class LinkedInExtractor(BaseExtractor):
             about_url = re.sub(r'/+about/+', '/about/', about_url)
             try:
                 page.goto(about_url, wait_until="domcontentloaded", timeout=15000)
-                time.sleep(1)
+                time.sleep(2)
             except Exception:
                 pass  # Continue with current page
 
-        # Company name
-        name = self._extract_name(page)
-        if name:
-            result["name"] = name
+        # Run JavaScript extraction
+        try:
+            extracted = page.evaluate(EXTRACTION_JS)
+            if extracted:
+                result.update(extracted)
+        except Exception:
+            pass
 
-        # Employee count
-        employees = self._extract_employees(page)
-        if employees:
-            result["employees"] = employees
-
-        # Headquarters
-        hq = self._extract_hq(page)
-        if hq:
-            result["hq"] = hq
-
-        # Industry
-        industry = self._extract_industry(page)
-        if industry:
-            result["industry"] = industry
-
-        # Founded year
-        founded = self._extract_founded(page)
-        if founded:
-            result["founded"] = founded
-
-        # Website
-        website = self._extract_website(page)
-        if website:
-            result["website"] = website
-
-        # Specialties
-        specialties = self._extract_specialties(page)
-        if specialties:
-            result["specialties"] = specialties
-
-        # Company type
-        company_type = self._extract_type(page)
-        if company_type:
-            result["type"] = company_type
-
-        # Description
-        desc = self._extract_description(page)
-        if desc:
-            result["description"] = desc
+        # Fallback: try regex on page content if JS extraction failed
+        if len(result) <= 2:  # Only source and url
+            content = page.content()
+            self._extract_from_html(content, result)
 
         return result
 
-    def _extract_name(self, page: Page) -> str | None:
-        """Extract company name."""
-        selectors = [
-            'h1[class*="org-top-card"]',
-            'h1.ember-view',
-            'h1',
-        ]
-        for sel in selectors:
-            text = self._safe_text(page, sel)
-            if text and len(text) < 100:
-                return text.strip()
-        return None
-
-    def _extract_employees(self, page: Page) -> str | None:
-        """Extract employee count."""
-        content = page.content()
-
-        # LinkedIn shows "X employees" or "X,XXX employees"
+    def _extract_from_html(self, content: str, result: dict):
+        """Fallback extraction from raw HTML."""
+        # Employee count
         patterns = [
-            r'([\d,]+(?:-[\d,]+)?)\s*employees?\s*on\s*LinkedIn',
-            r'([\d,]+(?:-[\d,]+)?)\s*employees?',
-            r'Company size[:\s]*([\d,]+(?:-[\d,]+)?)',
+            r'(\d{1,3}(?:,\d{3})*(?:-\d{1,3}(?:,\d{3})*)?)\s+employees\s+on\s+LinkedIn',
+            r'Company size[:\s]*(\d{1,3}(?:,\d{3})*(?:-\d{1,3}(?:,\d{3})*)?)',
         ]
         for pattern in patterns:
             match = re.search(pattern, content, re.I)
             if match:
-                return match.group(1)
+                result["employees"] = match.group(1)
+                break
 
-        # Try specific selectors
-        selectors = [
-            '[class*="employee-count"]',
-            'dd:has(+ dt:text("Company size"))',
-        ]
-        for sel in selectors:
-            text = self._safe_text(page, sel)
-            if text:
-                match = re.search(r'([\d,]+)', text)
-                if match:
-                    return match.group(1)
+        # Headquarters
+        hq_match = re.search(r'Headquarters?[:\s]*([^<\n]{5,50})', content, re.I)
+        if hq_match:
+            result["hq"] = re.sub(r'<[^>]+>', '', hq_match.group(1)).strip()
 
-        return None
+        # Industry
+        ind_match = re.search(r'Industry[:\s]*([^<\n]{5,50})', content, re.I)
+        if ind_match:
+            result["industry"] = re.sub(r'<[^>]+>', '', ind_match.group(1)).strip()
 
-    def _extract_hq(self, page: Page) -> str | None:
-        """Extract headquarters location."""
-        content = page.content()
-
-        patterns = [
-            r'Headquarters?[:\s]*([^<\n]+)',
-            r'HQ[:\s]*([^<\n]+)',
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, content, re.I)
-            if match:
-                hq = match.group(1).strip()
-                # Clean up
-                hq = re.sub(r'<[^>]+>', '', hq)
-                if len(hq) < 100:
-                    return hq
-
-        return None
-
-    def _extract_industry(self, page: Page) -> str | None:
-        """Extract industry."""
-        content = page.content()
-
-        patterns = [
-            r'Industry[:\s]*([^<\n]+)',
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, content, re.I)
-            if match:
-                industry = match.group(1).strip()
-                industry = re.sub(r'<[^>]+>', '', industry)
-                if len(industry) < 100:
-                    return industry
-
-        return None
-
-    def _extract_founded(self, page: Page) -> str | None:
-        """Extract founded year."""
-        content = page.content()
-
-        patterns = [
-            r'Founded[:\s]*(\d{4})',
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, content, re.I)
-            if match:
-                return match.group(1)
-
-        return None
-
-    def _extract_website(self, page: Page) -> str | None:
-        """Extract company website."""
-        content = page.content()
-
-        # Look for website link
-        patterns = [
-            r'Website[:\s]*<[^>]*href="([^"]+)"',
-            r'href="(https?://(?:www\.)?[^"]+)"[^>]*>.*?[Vv]isit',
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, content)
-            if match:
-                url = match.group(1)
-                if "linkedin.com" not in url:
-                    return url
-
-        # Try selector
-        selectors = [
-            'a[href*="http"]:has-text("Visit")',
-            '[data-test-id*="website"] a',
-        ]
-        for sel in selectors:
-            href = self._safe_attr(page, sel, "href")
-            if href and "linkedin.com" not in href:
-                return href
-
-        return None
-
-    def _extract_specialties(self, page: Page) -> list[str] | None:
-        """Extract company specialties."""
-        content = page.content()
-
-        match = re.search(r'Specialties?[:\s]*([^<\n]+)', content, re.I)
-        if match:
-            specialties_text = match.group(1).strip()
-            # Split by comma
-            specialties = [s.strip() for s in specialties_text.split(",")]
-            specialties = [s for s in specialties if s and len(s) < 50]
-            return specialties[:10] if specialties else None
-
-        return None
-
-    def _extract_type(self, page: Page) -> str | None:
-        """Extract company type (Public, Private, etc.)."""
-        content = page.content()
-
-        patterns = [
-            r'Type[:\s]*(Public|Private|Partnership|Nonprofit|Self-[Ee]mployed|Government)',
-            r'Company type[:\s]*(Public|Private|Partnership)',
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, content, re.I)
-            if match:
-                return match.group(1)
-
-        return None
-
-    def _extract_description(self, page: Page) -> str | None:
-        """Extract company description."""
-        selectors = [
-            '[class*="org-about-us-organization-description"]',
-            '[class*="about-us"] p',
-            '[class*="description"]',
-        ]
-        for sel in selectors:
-            text = self._safe_text(page, sel)
-            if text and len(text) > 50:
-                return text[:500] + "..." if len(text) > 500 else text
-
-        return None
+        # Founded
+        founded_match = re.search(r'Founded[:\s]*(\d{4})', content, re.I)
+        if founded_match:
+            result["founded"] = founded_match.group(1)
