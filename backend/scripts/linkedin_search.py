@@ -15,9 +15,8 @@ from playwright.sync_api import sync_playwright
 
 from scripts.linkedin_auth import PROFILE_DIR, _clear_lock
 from scripts.scrape_utils import parse_days_ago_en, days_ago_to_iso, now_iso
-from scripts.scraper_config import (
-    load_config, get_selector, get_config_value, build_extraction_js
-)
+from scripts.scraper_config import load_config, get_selector, get_config_value
+from scripts.research.remote import get_extractor_js
 from server.utils import categorize_level, has_ai_focus, level_rank
 
 # Search results cache directory
@@ -66,141 +65,10 @@ REGION_PRESETS = {
     "czechia": {"geo_id": "104508036", "remote": True},
 }
 
-# JS: Extract job listings from search results page.
-# Selectors: .job-card-container for cards, artdeco-entity-lockup for metadata.
-# Also extracts posting date from <time> or footer items for "X days ago" text.
-EXTRACTION_JS = """
-() => {
-    const jobs = [];
-    const cards = document.querySelectorAll('.job-card-container');
-
-    cards.forEach(card => {
-        const link = card.querySelector('a[href*="/jobs/view/"]');
-        if (!link) return;
-
-        const href = link.getAttribute('href');
-        const jobIdMatch = href.match(/\\/jobs\\/view\\/(\\d+)/);
-        if (!jobIdMatch) return;
-
-        const title = link.textContent.trim().split('\\n')[0].replace(' with verification', '').trim();
-        const companyEl = card.querySelector('.artdeco-entity-lockup__subtitle');
-        const company = companyEl ? companyEl.textContent.trim() : '';
-        const locationEl = card.querySelector('.artdeco-entity-lockup__caption');
-        const location = locationEl ? locationEl.textContent.trim() : '';
-
-        // Extract posting date - try multiple selectors
-        let postedText = '';
-        const timeEl = card.querySelector('time');
-        if (timeEl) {
-            postedText = timeEl.textContent.trim();
-        } else {
-            // Fallback: look for footer items containing time-related text
-            const footerItems = card.querySelectorAll('.job-card-container__footer-item, .job-card-container__listed-time');
-            for (const item of footerItems) {
-                const text = item.textContent.trim().toLowerCase();
-                if (text.includes('ago') || text.includes('hour') || text.includes('day') || text.includes('week') || text.includes('month')) {
-                    postedText = item.textContent.trim();
-                    break;
-                }
-            }
-        }
-
-        jobs.push({
-            job_id: jobIdMatch[1],
-            title,
-            company,
-            location,
-            posted_text: postedText,
-            url: `https://www.linkedin.com/jobs/view/${jobIdMatch[1]}/`,
-        });
-    });
-
-    return jobs;
-}
-"""
-
-# Use config-driven extraction JS if available, otherwise hardcoded default
-_EXTRACTION_JS = build_extraction_js(_config, EXTRACTION_JS)
-
-# JS: Scroll the job list to trigger lazy loading.
-SCROLL_JS = """
-() => {
-    const containers = document.querySelectorAll('*');
-    for (let el of containers) {
-        // Find scrollable element containing job cards
-        if (el.scrollHeight > el.clientHeight && el.clientHeight > 100) {
-            if (el.querySelector('.job-card-container') || el.querySelector('[data-job-id]') || el.querySelector('.jobs-search-results__list-item')) {
-                el.scrollTo(0, el.scrollHeight);
-                return true;
-            }
-        }
-    }
-    return false;
-}
-"""
-
-# JS: Alternate extraction for recommended/collections pages.
-# LinkedIn uses different selectors on /jobs/collections/recommended/ vs search.
-EXTRACTION_JS_ALT = """
-() => {
-    const jobs = [];
-
-    // Try multiple selector patterns
-    const selectors = [
-        '.jobs-search-results__list-item',
-        '[data-job-id]',
-        '.job-card-list__entity-lockup',
-        '.jobs-job-board-list__item',
-        'li[class*="job"]'
-    ];
-
-    let cards = [];
-    for (const sel of selectors) {
-        cards = document.querySelectorAll(sel);
-        if (cards.length > 0) break;
-    }
-
-    cards.forEach(card => {
-        // Find job link
-        const link = card.querySelector('a[href*="/jobs/view/"]');
-        if (!link) return;
-
-        const href = link.getAttribute('href');
-        const jobIdMatch = href.match(/\\/jobs\\/view\\/(\\d+)/);
-        if (!jobIdMatch) return;
-
-        // Try multiple title selectors
-        let title = '';
-        const titleEl = card.querySelector('.job-card-list__title, .artdeco-entity-lockup__title, [class*="title"]');
-        if (titleEl) {
-            title = titleEl.textContent.trim().split('\\n')[0].replace(' with verification', '').trim();
-        } else {
-            title = link.textContent.trim().split('\\n')[0].replace(' with verification', '').trim();
-        }
-
-        // Try multiple company selectors
-        let company = '';
-        const companyEl = card.querySelector('.job-card-container__primary-description, .artdeco-entity-lockup__subtitle, [class*="company"], [class*="subtitle"]');
-        if (companyEl) company = companyEl.textContent.trim();
-
-        // Try multiple location selectors
-        let location = '';
-        const locationEl = card.querySelector('.job-card-container__metadata-item, .artdeco-entity-lockup__caption, [class*="location"], [class*="caption"]');
-        if (locationEl) location = locationEl.textContent.trim();
-
-        jobs.push({
-            job_id: jobIdMatch[1],
-            title,
-            company,
-            location,
-            posted_text: '',
-            url: `https://www.linkedin.com/jobs/view/${jobIdMatch[1]}/`,
-        });
-    });
-
-    return jobs;
-}
-"""
+# Remote JS extraction - fetched from GitHub with local caching
+def _get_extractor_js() -> str:
+    """Get LinkedIn search extraction JS from remote."""
+    return get_extractor_js("linkedin_search")
 
 
 def _generate_search_id() -> str:
@@ -320,6 +188,9 @@ def search_linkedin(
     seen_ids = set()
     pages_fetched = 0
 
+    # Fetch extractor JS from remote (cached locally)
+    extractor_js = _get_extractor_js()
+
     try:
         with sync_playwright() as p:
             context = p.chromium.launch_persistent_context(
@@ -346,13 +217,13 @@ def search_linkedin(
                 for page_num in range(max_pages):
                     # Scroll to load all jobs
                     for _ in range(5):
-                        scrolled = page.evaluate(SCROLL_JS)
+                        scrolled = page.evaluate(f"({extractor_js}).scroll()")
                         if not scrolled:
                             break
                         time.sleep(1)
 
                     # Extract jobs
-                    raw_jobs = page.evaluate(_EXTRACTION_JS)
+                    raw_jobs = page.evaluate(f"({extractor_js}).extract()")
                     pages_fetched += 1
 
                     for job in raw_jobs:
@@ -522,6 +393,9 @@ def scrape_top_picks(
     all_jobs = []
     seen_ids = set()
 
+    # Fetch extractor JS from remote (cached locally)
+    extractor_js = _get_extractor_js()
+
     try:
         with sync_playwright() as p:
             context = p.chromium.launch_persistent_context(
@@ -551,17 +425,17 @@ def scrape_top_picks(
 
                 # Scroll to load all jobs
                 for _ in range(8):
-                    scrolled = page.evaluate(SCROLL_JS)
+                    scrolled = page.evaluate(f"({extractor_js}).scroll()")
                     if not scrolled:
                         break
                     time.sleep(1)
 
                 # Extract jobs - try multiple selectors
-                raw_jobs = page.evaluate(_EXTRACTION_JS)
+                raw_jobs = page.evaluate(f"({extractor_js}).extract()")
 
                 # If no jobs found, try alternate selectors for recommended page
                 if not raw_jobs:
-                    raw_jobs = page.evaluate(EXTRACTION_JS_ALT)
+                    raw_jobs = page.evaluate(f"({extractor_js}).extractAlt()")
 
                 # Debug: save screenshot if no jobs found
                 if not raw_jobs:

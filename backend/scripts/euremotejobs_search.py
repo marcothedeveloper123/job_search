@@ -13,9 +13,8 @@ from typing import Optional
 from playwright.sync_api import sync_playwright
 
 from scripts.scrape_utils import parse_days_ago_en, days_ago_to_iso, now_iso
-from scripts.scraper_config import (
-    load_config, get_selector, get_config_value, build_extraction_js
-)
+from scripts.scraper_config import load_config, get_selector, get_config_value
+from scripts.research.remote import get_extractor_js
 from server.utils import categorize_level, has_ai_focus
 
 # Search results cache directory
@@ -115,73 +114,10 @@ def _build_search_url(
     return f"https://euremotejobs.com/?{'&'.join(params)}"
 
 
-# JS: Extract job listings from euremotejobs.com search page.
-# Finds all /job/{slug} links, parses title/company/location from link text,
-# extracts "Posted X days ago" pattern and salary (£/€/$) from text content.
-EXTRACT_JOBS_JS = """
-() => {
-    const jobs = [];
-    const links = document.querySelectorAll('a[href*="/job/"]');
-    const seen = new Set();
-
-    links.forEach(link => {
-        const href = link.getAttribute('href');
-        if (!href) return;
-
-        // Extract job slug from URL
-        const slugMatch = href.match(/\\/job\\/([^/]+)/);
-        if (!slugMatch) return;
-        const slug = slugMatch[1];
-
-        // Dedupe by slug
-        if (seen.has(slug)) return;
-        seen.add(slug);
-
-        // Parse the link text content (title, company, location, tags, posted)
-        const text = link.innerText.trim();
-        const lines = text.split('\\n').map(l => l.trim()).filter(l => l);
-
-        // First line is title
-        const title = lines[0] || '';
-
-        // Second line is usually company
-        const company = lines[1] || '';
-
-        // Third line is location
-        const location = lines[2] || '';
-
-        // Look for posted date pattern in lines
-        let postedText = null;
-        for (const line of lines) {
-            const agoMatch = line.match(/Posted\\s+(\\d+\\s*(?:hour|day|week|month)s?\\s*ago)/i);
-            if (agoMatch) {
-                postedText = agoMatch[1];
-                break;
-            }
-        }
-
-        // Look for salary pattern
-        let salary = null;
-        const salaryMatch = text.match(/[£€$][\\d,]+(?:\\s*[-–]\\s*[£€$]?[\\d,]+)?/);
-        if (salaryMatch) salary = salaryMatch[0];
-
-        jobs.push({
-            slug: slug,
-            title: title,
-            company: company,
-            location: location,
-            salary: salary,
-            postedText: postedText,
-            url: href.startsWith('http') ? href : 'https://euremotejobs.com' + href
-        });
-    });
-
-    return jobs;
-}
-"""
-
-# Use config-driven extraction JS if available, otherwise hardcoded default
-_EXTRACT_JOBS_JS = build_extraction_js(_config, EXTRACT_JOBS_JS)
+# Remote JS extraction - fetched from GitHub with local caching
+def _get_extractor_js() -> str:
+    """Get EU Remote Jobs extraction JS from remote."""
+    return get_extractor_js("euremotejobs")
 
 
 def search_euremotejobs(
@@ -222,6 +158,9 @@ def search_euremotejobs(
     all_jobs = []
     seen_slugs = set()
 
+    # Fetch extractor JS from remote (cached locally)
+    extractor_js = _get_extractor_js()
+
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
@@ -233,7 +172,7 @@ def search_euremotejobs(
 
                 for load_num in range(max_loads):
                     # Extract current jobs
-                    jobs = page.evaluate(_EXTRACT_JOBS_JS)
+                    jobs = page.evaluate(extractor_js)
 
                     for job in jobs:
                         slug = job.get("slug")
