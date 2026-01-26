@@ -1,0 +1,4 @@
+{
+  "version": "2026-01-26",
+  "extractors": ["glassdoor", "crunchbase", "g2", "linkedin"]
+}

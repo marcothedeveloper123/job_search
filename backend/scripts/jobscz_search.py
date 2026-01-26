@@ -16,7 +16,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from scripts.scrape_utils import parse_days_ago_cs, days_ago_to_iso, now_iso
-from scripts.scraper_config import load_config, get_selector, get_config_value
+from scripts.scraper_config import load_config, get_selector
 from server.utils import categorize_level, has_ai_focus, level_rank
 
 # Search results cache directory
