@@ -46,6 +46,7 @@ Status:
   status                  Server + auth check
   login                   LinkedIn auth
   pipeline [--all]        Overview (--all for full list)
+  validate [--json]       Test all scrapers
 
 Search:
   filter                  Show search filters
@@ -344,6 +345,18 @@ def main():
 
     elif cmd == "login":
         print(tool.login())
+
+    elif cmd == "validate":
+        import json as json_mod
+        from scripts.validate_scrapers import validate_all, format_human
+        summary = validate_all()
+        if "--json" in rest:
+            print(json_mod.dumps(summary, indent=2))
+        else:
+            print(format_human(summary))
+        # Exit code: 0 if all pass/skip, 1 if any fail
+        if summary["failed"] > 0:
+            sys.exit(1)
 
     elif cmd == "jobs":
         if not rest or rest[0] in ("--help", "-h"):
