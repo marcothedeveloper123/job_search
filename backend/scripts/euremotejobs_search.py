@@ -228,8 +228,8 @@ def search_euremotejobs(
             page = browser.new_page()
 
             try:
-                page.goto(url, wait_until="domcontentloaded", timeout=30000)
-                page.wait_for_timeout(2000)
+                page.goto(url, timeout=60000)
+                page.wait_for_timeout(5000)
 
                 for load_num in range(max_loads):
                     # Extract current jobs
