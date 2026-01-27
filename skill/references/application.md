@@ -1,5 +1,7 @@
 # Application Prep Standards
 
+**ALL output goes to `/tmp/app.json` → `jbs app update`. NEVER output application content in chat. Chat is only for confirming: "Uploaded application materials for [Company]."**
+
 **Goal:** Give user a concrete to-do list, not a black hole. Squeeze every drop of opportunity.
 
 Read before preparing:
@@ -85,22 +87,6 @@ If STAR bank doesn't cover a JD requirement:
 3. **Find positioning angles** — How to frame partial matches as strengths
 4. **Identify story gaps** — Which STAR stories are missing?
 
-### Output Structure
-
-```markdown
-## Matches (lead with these)
-- [Requirement]: [Evidence from profile] — [How to emphasize]
-
-## Partial Matches (frame carefully)
-- [Requirement]: [Adjacent experience] — [How to position]
-
-## Gaps (address proactively)
-- [Requirement]: [Gap] — [Mitigation: learning plan, transferable skills, honest acknowledgment]
-
-## Missing Stories (drill the user)
-- [Requirement]: Need STAR story for [X]. Ask user: "[specific probing question]"
-```
-
 ### Squeeze Every Drop
 
 For each gap, ask:
@@ -117,21 +103,10 @@ For each gap, ask:
 
 ### Structure (4 paragraphs, 250 words max)
 
-**Para 1 — Hook (1 sentence):**
-Immediately relevant accomplishment that maps to their need.
-> "I took [Current Company]'s [Product] from concept to beta in 3 months—exactly the zero-to-one execution [Company] needs for [specific product/challenge from research]."
-
-**Para 2 — Evidence (2-3 sentences):**
-Connect strongest STAR stories to their specific challenges (from deep dive research).
-> "At [Previous Company], I grew [metric] by [action]. At [Current Company], I'm applying the same approach to [current work]. Your [specific product challenge from research] is the same pattern."
-
-**Para 3 — Why This Company (2-3 sentences):**
-Prove you researched them. Reference specific product, mission, challenge.
-> "I've followed [Company]'s approach to [specific thing from research]. The [specific challenge/opportunity] aligns with my experience in [relevant area]. I'm particularly drawn to [specific authentic reason]."
-
-**Para 4 — Close (1-2 sentences):**
-Clear ask, confident but not arrogant.
-> "I'd welcome the chance to discuss how my [specific skill] can accelerate [their specific goal]. Available at your convenience."
+**Para 1 — Hook (1 sentence):** Immediately relevant accomplishment that maps to their need.
+**Para 2 — Evidence (2-3 sentences):** Connect strongest STAR stories to their specific challenges (from deep dive research).
+**Para 3 — Why This Company (2-3 sentences):** Prove you researched them. Reference specific product, mission, challenge.
+**Para 4 — Close (1-2 sentences):** Clear ask, confident but not arrogant.
 
 ### Personalization Checklist
 

@@ -1,5 +1,7 @@
 # Deep Dive Standards
 
+**ALL output goes to `/tmp/dive.json` → `jbs dive <job_id> --file /tmp/dive.json`. NEVER output research in chat. Chat is only for confirming: "Posted deep dive for [Company]."**
+
 Read `data/profile/anti-positioning.md` before qualifying.
 
 ## Qualification Gate
@@ -149,39 +151,7 @@ Search broadly. These are starting points, not limits:
 
 ## Field Standards
 
-### Company Research
-
-| Field | Standard | Example |
-|-------|----------|---------|
-| `company_stage` | Stage + funding + revenue with citation | "Series C, $85M raised ([Crunchbase](url)). $45M ARR ([TechCrunch Jan 2025](url))" |
-| `company_product` | What they sell + who buys it | "AI document extraction for legal. Enterprise SaaS, 200+ customers." |
-| `company_size` | Headcount with source | "~400 employees ([LinkedIn](url)), grown 50% YoY" |
-
-### Sentiment Research
-
-Itemized findings with sentiment indicators. Each item: `{"finding": "...", "sentiment": "positive|negative|neutral"}`
-
-| Field | Format |
-|-------|--------|
-| `employee_sentiment` | `[{"finding": "[Glassdoor 3.8/5](url)", "sentiment": "positive"}, {"finding": "PM turnover concerns ([review](url))", "sentiment": "negative"}]` |
-| `customer_sentiment` | `[{"finding": "[G2 4.5/5](url)", "sentiment": "positive"}, {"finding": "Pricing complaints ([thread](url))", "sentiment": "negative"}]` |
-
-### Role Research
-
-| Field | Standard | Example |
-|-------|----------|---------|
-| `role_scope` | Extracted from JD: what you own, who you report to | "Staff PM for extraction pipeline. Reports to VP Product. Own ML integration roadmap." |
-| `role_team` | Team structure if mentioned | "3 engineers, 1 designer. Cross-functional with ML team." |
-
-### Context Research
-
-Itemized findings with sentiment indicators. Each item: `{"finding": "...", "sentiment": "positive|negative|neutral"}`
-
-| Field | Format |
-|-------|--------|
-| `market_context` | `[{"finding": "Market leader in legal vertical", "sentiment": "positive"}, {"finding": "Heavy competition from Docugami", "sentiment": "negative"}]` |
-| `interview_process` | `[{"finding": "[5 rounds, includes case study](url)", "sentiment": "neutral"}, {"finding": "'Intense but fair' ([review](url))", "sentiment": "positive"}]` |
-| `remote_reality` | `[{"finding": "Core hours 9-5 CET required ([review](url))", "sentiment": "negative"}, {"finding": "No office visits required", "sentiment": "positive"}]` |
+All field formats are shown in the JSON example at the end of this document. Sentiment fields use: `[{"finding": "...", "sentiment": "positive|negative|neutral"}]`
 
 ### Analysis
 

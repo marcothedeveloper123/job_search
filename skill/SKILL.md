@@ -124,7 +124,7 @@ These reference files are bundled inside this skill. Read them from the skill's 
 
 # Rules
 
-1. **NEVER output job data in chat.** User sees everything at localhost:8000. Don't list jobs, don't summarize JDs, don't repeat what the CLI returned. Just confirm the action: "Scraped 3 JDs" or "Posted deep dive for Acme Corp". The web UI is the interface—chat is just for commands.
+1. **NEVER output content in chat.** All generated content (deep dives, CVs, cover letters, gap analyses, interview prep) goes to JSON files → `jbs` CLI → web UI. Chat is ONLY for confirming actions: "Posted deep dive for Acme Corp" or "Uploaded application materials." Don't list jobs, don't summarize JDs, don't repeat what the CLI returned.
 2. **Filter before scraping.** Hard filters from `jbs filter` are auto-applied during search. Archive remaining non-fits.
 3. **Scrape JD before qualifying.** No speculation from titles.
 4. **One action, confirm, next.** Don't batch silently. Don't narrate.
